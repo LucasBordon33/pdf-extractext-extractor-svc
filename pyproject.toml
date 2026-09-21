@@ -8,6 +8,7 @@ dependencies = [
     "uvicorn[standard]",
     "pydantic>=2",
     "PyPDF2",
+    "pydantic-settings>=2.15.0",
 ]
 
 [project.optional-dependencies]
