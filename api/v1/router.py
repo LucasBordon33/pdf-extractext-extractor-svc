@@ -26,11 +26,11 @@ router = APIRouter(prefix="/api/v1", tags=["extraction"])
             "model": ErrorResponse,
             "description": "El archivo esta corrupto o cifrado",
         },
-        status.HTTP_413_REQUEST_ENTITY_TOO_LARGE: {
+        status.HTTP_413_CONTENT_TOO_LARGE: {
             "model": ErrorResponse,
             "description": "El archivo supera el tamaño maximo permitido",
         },
-        status.HTTP_422_UNPROCESSABLE_ENTITY: {
+        status.HTTP_422_UNPROCESSABLE_CONTENT: {
             "model": ErrorResponse,
             "description": "Payload invalido o extraccion vacia",
         },

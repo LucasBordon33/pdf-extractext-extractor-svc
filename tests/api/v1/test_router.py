@@ -115,7 +115,9 @@ class TestDomainErrors:
 
 class TestUnexpectedErrors:
     def test_unexpected_exception_returns_500_without_leaking_details(self):
-        extractor = StubExtractor(error=RuntimeError("secreto interno"))
+        # RuntimeError tiene su propio mapeo (400); usamos un tipo
+        # sin handler especifico para probar el 500 generico.
+        extractor = StubExtractor(error=KeyError("secreto interno"))
         client = make_client(extractor)
         response = client.post("/api/v1/extract", json=valid_body())
         assert response.status_code == 500
