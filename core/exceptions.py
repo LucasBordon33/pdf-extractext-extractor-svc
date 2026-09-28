@@ -29,7 +29,7 @@ class CorruptFileError(DocumentExtractionError):
     """El archivo está dañado o no puede leerse."""
 
     error_code: str = "CORRUPT_FILE"
-    status_http: int = HTTPStatus.UNPROCESSABLE_ENTITY
+    status_http: int = HTTPStatus.BAD_REQUEST
 
 
 class FileTooLargeError(DocumentExtractionError):

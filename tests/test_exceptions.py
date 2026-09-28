@@ -31,7 +31,7 @@ class TestConcreteExceptions:
         ("exc_class", "error_code", "status_http"),
         [
             (UnsupportedFormatError, "UNSUPPORTED_FORMAT", 415),
-            (CorruptFileError, "CORRUPT_FILE", 422),
+            (CorruptFileError, "CORRUPT_FILE", 400),
             (FileTooLargeError, "FILE_TOO_LARGE", 413),
             (EmptyExtractionError, "EMPTY_EXTRACTION", 422),
         ],
