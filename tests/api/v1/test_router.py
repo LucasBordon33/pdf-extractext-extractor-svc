@@ -126,6 +126,14 @@ class TestUnexpectedErrors:
         assert "secreto interno" not in body["message"]
 
 
+class TestHealthEndpoint:
+    def test_health_returns_200_ok(self):
+        client = make_client(StubExtractor())
+        response = client.get("/api/v1/health")
+        assert response.status_code == 200
+        assert response.json() == {"status": "ok"}
+
+
 class TestOpenApi:
     def test_endpoint_documents_response_model(self):
         client = make_client(StubExtractor())

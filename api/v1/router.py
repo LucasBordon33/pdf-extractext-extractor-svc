@@ -15,6 +15,15 @@ from domain.services.document_service import DocumentService
 router = APIRouter(prefix="/api/v1", tags=["extraction"])
 
 
+@router.get(
+    "/health",
+    summary="Liveness probe para orquestadores y healthchecks",
+)
+def health() -> dict[str, str]:
+    """Responde 200 mientras el servicio esta vivo."""
+    return {"status": "ok"}
+
+
 @router.post(
     "/extract",
     response_model=ExtractResponse,

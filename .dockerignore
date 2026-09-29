@@ -1,0 +1,31 @@
+# Control de versiones
+.git
+.gitignore
+
+# Entornos y secretos (Settings lee .env: nunca entra a la imagen)
+.venv
+.env
+.env.example
+
+# Artefactos de Python
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+
+# Cachés de tooling
+cache/
+.pytest_cache/
+.ruff_cache/
+
+# Logs
+*.log
+
+# Meta del propio Docker (no cambia el contexto de build)
+Dockerfile
+.dockerignore
+
+# Documentacion no requerida en la imagen
+LICENSE
+README.md
