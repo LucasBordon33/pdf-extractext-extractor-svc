@@ -1,33 +1,24 @@
-"""Tests del adaptador PdfTextExtractor.
+"""Tests de integración controlada del adaptador PdfTextExtractor.
 
-Las fixtures de PDF se construyen en memoria con PyPDF2 (sin archivos
-en disco): rápido, determinista y versionable en el propio test.
+"Controlada": PDFs generados en memoria por ``tests/fixtures/pdf_factory``
+(sin I/O de disco), procesados por el extractor REAL (PyPDF2). El dominio
+no participa: aquí se valida el adaptador contra el contrato del puerto.
 """
 
-from io import BytesIO
-
 import pytest
-from PyPDF2 import PdfWriter
 
+from adapters.extractors.pdf_extractor import PdfTextExtractor
 from core.exceptions import CorruptFileError, EmptyExtractionError
 from domain.ports.text_extractor import TextExtractor
-
-
-def build_pdf_bytes(password: str = "") -> bytes:
-    """Genera un PDF mínimo en memoria, opcionalmente cifrado."""
-    writer = PdfWriter()
-    writer.add_blank_page(width=72, height=72)
-    if password:
-        writer.encrypt(user_password=password, owner_password="owner")
-    buffer = BytesIO()
-    writer.write(buffer)
-    return buffer.getvalue()
+from tests.fixtures.pdf_factory import (
+    blank_pdf,
+    encrypted_pdf,
+    pdf_with_text,
+)
 
 
 @pytest.fixture
-def extractor():
-    from adapters.extractors.pdf_extractor import PdfTextExtractor
-
+def extractor() -> TextExtractor:
     return PdfTextExtractor()
 
 
@@ -37,51 +28,46 @@ class TestContract:
 
 
 class TestSuccessfulExtraction:
-    def test_extracts_text_from_valid_pdf(self, extractor, pdf_factory):
-        text = extractor.extract(pdf_factory("Hola dominio"), "doc.pdf")
+    def test_extracts_text_from_valid_pdf(self, extractor):
+        text = extractor.extract(pdf_with_text("Hola dominio"), "doc.pdf")
         assert "Hola dominio" in text
 
-    def test_returns_string_type(self, extractor, pdf_factory):
-        result = extractor.extract(pdf_factory("abc"), "doc.pdf")
+    def test_returns_string_type(self, extractor):
+        result = extractor.extract(pdf_with_text("abc"), "doc.pdf")
         assert isinstance(result, str)
 
+    def test_concatenates_text_from_all_pages(self, extractor):
+        pdf = pdf_with_text("pagina uno", "pagina dos")
+        text = extractor.extract(pdf, "multi.pdf")
+        assert "pagina uno" in text
+        assert "pagina dos" in text
 
-class TestCorruptFiles:
+
+class TestCorruptPdfs:
     @pytest.mark.parametrize(
         "payload",
-        [
-            b"",
-            b"esto no es un pdf",
-            b"%PDF-1.4 truncado sin xref",
-        ],
+        [b"", b"esto no es un pdf", b"%PDF-1.4 truncado sin xref"],
+        ids=["vacio", "basura", "truncado"],
     )
-    def test_corrupt_content_raises_corrupt_file_error(
-        self, extractor, payload
-    ):
+    def test_corrupt_content_raises_corrupt_file_error(self, extractor, payload):
         with pytest.raises(CorruptFileError) as exc_info:
             extractor.extract(payload, "corrupto.pdf")
         assert "corrupto.pdf" in str(exc_info.value)
 
 
-class TestEmptyExtraction:
-    def test_pdf_without_text_raises_empty_extraction_error(self, extractor):
-        blank_pdf = build_pdf_bytes()  # página en blanco: sin texto
+class TestPdfsWithoutText:
+    def test_scanned_like_pdf_raises_empty_extraction_error(self, extractor):
+        """Página en blanco ≈ PDF escaneado: sin capa de texto extraíble."""
         with pytest.raises(EmptyExtractionError):
-            extractor.extract(blank_pdf, "escaneado.pdf")
+            extractor.extract(blank_pdf(), "escaneado.pdf")
 
 
 class TestRestrictedPdfs:
     def test_pdf_with_empty_user_password_is_processed(self, extractor):
-        restricted = build_pdf_bytes(password="")
+        """Permisos restringidos pero legible: extrae (nada) y reporta vacío."""
         with pytest.raises(EmptyExtractionError):
-            # Página en blanco cifrada pero legible: extrae "lo legible"
-            # (nada) y reporta extracción vacía, no falla por el cifrado.
-            extractor.extract(restricted, "protegido.pdf")
+            extractor.extract(encrypted_pdf(user_password=""), "protegido.pdf")
 
-    def test_pdf_with_unknown_password_raises_corrupt_file_error(
-        self, extractor
-    ):
-        locked = build_pdf_bytes(password="secreto")
+    def test_pdf_with_unknown_password_raises_corrupt_file_error(self, extractor):
         with pytest.raises(CorruptFileError):
-            extractor.extract(locked, "bloqueado.pdf")
-
+            extractor.extract(encrypted_pdf(user_password="secreto"), "bloqueado.pdf")
