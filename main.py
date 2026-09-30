@@ -1,8 +1,11 @@
 """Punto de entrada del microservicio.
 
 Raiz de composicion: aqui (y solo aqui) se instancian los componentes
-de infraestructura (PyTextExtractor) y se inyectan en el dominio
+de infraestructura (PdfTextExtractor) y se inyectan en el dominio
 (DocumentService), que se registra en el contenedor para el router.
+
+Port binding (Twelve-Factor III): Uvicorn lee HOST/PORT del entorno
+via ``Settings`` — nada de puertos hardcodeados.
 """
 
 import uvicorn
@@ -14,9 +17,6 @@ from api.dependencies import register
 from core.config import get_settings
 from domain.services.document_service import DocumentService
 
-_HOST = "0.0.0.0"
-_PORT = 8000
-
 
 def build_document_service() -> DocumentService:
     """Wiring manual (DI): infraestructura concreta → dominio."""
@@ -24,7 +24,7 @@ def build_document_service() -> DocumentService:
 
 
 def create_application() -> FastAPI:
-    """Ensambla la app FastAPI y registra las dependencias concretas."""
+    """Ensambla la app y registra las dependencias concretas."""
     app = create_app()
     register(DocumentService, build_document_service())
     return app
@@ -32,10 +32,18 @@ def create_application() -> FastAPI:
 
 app = create_application()
 
-if __name__ == "__main__":
+
+def run() -> None:
+    """Arranca el servidor con la configuración del entorno."""
+    settings = get_settings()
     uvicorn.run(
-        app,
-        host=_HOST,
-        port=_PORT,
-        log_level=get_settings().log_level.lower(),
+        "main:app",
+        host=settings.host,
+        port=settings.port,
+        workers=settings.uvicorn_workers,
+        log_level=settings.log_level.lower(),
     )
+
+
+if __name__ == "__main__":
+    run()
