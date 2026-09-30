@@ -60,18 +60,26 @@ class TestExtractRequestErrors:
 
 class TestExtractResponse:
     def test_serializes_to_dict(self):
-        response = ExtractResponse(filename="doc.pdf", text="texto extraido")
+        response = ExtractResponse(
+            filename="doc.pdf", markdown="texto extraido", page_count=2
+        )
         data = response.model_dump()
-        assert data == {"filename": "doc.pdf", "text": "texto extraido"}
+        assert data == {
+            "filename": "doc.pdf",
+            "markdown": "texto extraido",
+            "page_count": 2,
+        }
 
     def test_roundtrip_serialization(self):
-        original = ExtractResponse(filename="doc.pdf", text="texto")
+        original = ExtractResponse(
+            filename="doc.pdf", markdown="texto", page_count=1
+        )
         restored = ExtractResponse.model_validate(original.model_dump())
         assert restored == original
 
     def test_json_serialization(self):
-        response = ExtractResponse(filename="doc.pdf", text="texto")
-        assert '"text"' in response.model_dump_json()
+        response = ExtractResponse(filename="doc.pdf", markdown="texto", page_count=1)
+        assert '"markdown"' in response.model_dump_json()
 
 
 class TestErrorResponse:

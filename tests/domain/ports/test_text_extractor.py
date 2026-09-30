@@ -1,72 +1,83 @@
-"""Contrato del puerto TextExtractor.
+"""Contrato del puerto PdfToMarkdown.
 
 Usa una implementación fake en memoria para verificar que cualquier
 adaptador concreto respeta la firma y el comportamiento de errores:
-sin I/O real, tests rápidos y deterministas.
+sin I/O real, tests rápidos y deterministas. El contrato devuelve un
+``ExtractionResult`` enriquecido (markdown, páginas, duración).
 """
 
 import pytest
 
 from core.exceptions import CorruptFileError, EmptyExtractionError
-from domain.ports.text_extractor import TextExtractor
+from domain.models.extraction_result import ExtractionResult
+from domain.ports.text_extractor import PdfToMarkdown
 
 VALID_CONTENT = b"%PDF-1.4 contenido simulado"
-EXPECTED_TEXT = "texto extraido del documento"
+RESULT = ExtractionResult(
+    markdown="texto extraido",
+    page_count=1,
+    pages_processed=1,
+    duration_ms=5.0,
+)
 
 
-class FakeTextExtractor(TextExtractor):
+class FakePdfToMarkdown(PdfToMarkdown):
     """Implementación de prueba del contrato del puerto."""
 
-    def extract(self, content: bytes, filename: str) -> str:
-        if not content:
-            raise CorruptFileError(f"contenido invalido: {filename}")
-        text = EXPECTED_TEXT if content == VALID_CONTENT else ""
-        if not text.strip():
-            raise EmptyExtractionError(f"sin texto: {filename}")
-        return text
+    def __init__(self, error: Exception | None = None):
+        self._error = error
+        self.calls: list[tuple[bytes, str]] = []
+
+    def extract(self, content: bytes, filename: str) -> ExtractionResult:
+        self.calls.append((content, filename))
+        if self._error is not None:
+            raise self._error
+        return RESULT
 
 
 class TestContract:
     def test_is_abstract_and_cannot_be_instantiated(self):
         with pytest.raises(TypeError):
-            TextExtractor()
+            PdfToMarkdown()
 
     def test_subclass_without_extract_still_abstract(self):
-        class Incomplete(TextExtractor):
+        class Incomplete(PdfToMarkdown):
             pass
 
         with pytest.raises(TypeError):
             Incomplete()
 
-    def test_signature_accepts_content_and_filename(self):
-        extractor = FakeTextExtractor()
-        text = extractor.extract(VALID_CONTENT, filename="reporte.pdf")
-        assert text == EXPECTED_TEXT
+    def test_extract_returns_enriched_result(self):
+        extractor = FakePdfToMarkdown()
+        result = extractor.extract(VALID_CONTENT, filename="reporte.pdf")
+        assert isinstance(result, ExtractionResult)
+        assert result == RESULT
+
+    def test_result_fields_are_complete(self):
+        result = FakePdfToMarkdown().extract(VALID_CONTENT, "reporte.pdf")
+        assert result.markdown == "texto extraido"
+        assert result.page_count == 1
+        assert result.pages_processed == 1
+        assert result.duration_ms == 5.0
 
 
 class TestSuccessCases:
-    def test_returns_plain_text(self):
-        extractor = FakeTextExtractor()
-        result = extractor.extract(VALID_CONTENT, filename="reporte.pdf")
-        assert isinstance(result, str)
-        assert result
-
     def test_domain_never_sees_base64(self):
         """El puerto recibe bytes ya decodificados: pasar base64 debe
-        comportarse como contenido no procesable (falta de texto)."""
-        base64_payload = b"JVBERi0xLjQ="  # cómo NO debería llegar el dato
-        extractor = FakeTextExtractor()
-        with pytest.raises(EmptyExtractionError):
-            extractor.extract(base64_payload, filename="reporte.pdf")
+        tratarse como contenido opaco, no como transporte."""
+        base64_payload = b"JVBERi0xLjQ="
+        extractor = FakePdfToMarkdown()
+        result = extractor.extract(base64_payload, filename="reporte.pdf")
+        assert result == RESULT
 
 
 class TestErrorCases:
     def test_corrupt_content_raises_corrupt_file_error(self):
-        extractor = FakeTextExtractor()
+        extractor = FakePdfToMarkdown(error=CorruptFileError("dañado"))
         with pytest.raises(CorruptFileError):
             extractor.extract(b"", filename="corrupto.pdf")
 
     def test_empty_extraction_raises_empty_extraction_error(self):
-        extractor = FakeTextExtractor()
+        extractor = FakePdfToMarkdown(error=EmptyExtractionError("sin texto"))
         with pytest.raises(EmptyExtractionError):
-            extractor.extract(b"contenido sin texto util", filename="scan.pdf")
+            extractor.extract(b"contenido sin texto", filename="scan.pdf")

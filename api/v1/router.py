@@ -54,5 +54,7 @@ def extract_text_from_document(
     document_service: DocumentService = Depends(get_document_service),
 ) -> ExtractResponse:
     """Recibe bytes ya decodificados y delega en el dominio."""
-    text = document_service.extract_text(content=req.content, filename=req.filename)
-    return ExtractResponse(filename=req.filename, text=text)
+    result = document_service.extract(content=req.content, filename=req.filename)
+    return ExtractResponse(
+        filename=req.filename, markdown=result.markdown, page_count=result.page_count
+    )

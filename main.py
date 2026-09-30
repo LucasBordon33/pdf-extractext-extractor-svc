@@ -1,17 +1,17 @@
-"""Punto de entrada del microservicio.
+﻿"""Punto de entrada del microservicio.
 
 Raiz de composicion: aqui (y solo aqui) se instancian los componentes
-de infraestructura (PdfTextExtractor) y se inyectan en el dominio
+de infraestructura (PdfiumPdfToMarkdown) y se inyectan en el dominio
 (DocumentService), que se registra en el contenedor para el router.
 
 Port binding (Twelve-Factor III): Uvicorn lee HOST/PORT del entorno
-via ``Settings`` — nada de puertos hardcodeados.
+via ``Settings`` â€” nada de puertos hardcodeados.
 """
 
 import uvicorn
 from fastapi import FastAPI
 
-from adapters.extractors.pdf_extractor import PdfTextExtractor
+from adapters.extractors.pdf_extractor import PdfiumPdfToMarkdown
 from api.app import create_app
 from api.dependencies import register
 from core.config import get_settings
@@ -19,8 +19,8 @@ from domain.services.document_service import DocumentService
 
 
 def build_document_service() -> DocumentService:
-    """Wiring manual (DI): infraestructura concreta → dominio."""
-    return DocumentService(PdfTextExtractor())
+    """Wiring manual (DI): infraestructura concreta â†’ dominio."""
+    return DocumentService(PdfiumPdfToMarkdown())
 
 
 def create_application() -> FastAPI:
@@ -34,7 +34,7 @@ app = create_application()
 
 
 def run() -> None:
-    """Arranca el servidor con la configuración del entorno."""
+    """Arranca el servidor con la configuraciÃ³n del entorno."""
     settings = get_settings()
     uvicorn.run(
         "main:app",

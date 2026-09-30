@@ -1,4 +1,4 @@
-"""Contenedor manual de dependencias (DI).
+﻿"""Contenedor manual de dependencias (DI).
 
 ``main.py`` registra aqui las instancias concretas (composition
 root); los tests sobreescriben con ``app.dependency_overrides``.
@@ -8,7 +8,7 @@ que la app siga siendo funcional de forma aislada.
 
 from functools import lru_cache
 
-from adapters.extractors.pdf_extractor import PdfTextExtractor
+from adapters.extractors.pdf_extractor import PdfiumPdfToMarkdown
 from domain.services.document_service import DocumentService
 
 _registry: dict[type, object] = {}
@@ -22,7 +22,7 @@ def register(service_type: type, instance: object) -> None:
 @lru_cache
 def _default_document_service() -> DocumentService:
     """Wiring por defecto (defensivo) cuando no hay registro manual."""
-    return DocumentService(PdfTextExtractor())
+    return DocumentService(PdfiumPdfToMarkdown())
 
 
 def get_document_service() -> DocumentService:

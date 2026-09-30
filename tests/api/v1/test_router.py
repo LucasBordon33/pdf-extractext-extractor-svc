@@ -1,4 +1,4 @@
-"""Tests del endpoint POST /api/v1/extract.
+﻿"""Tests del endpoint POST /api/v1/extract.
 
 El servicio de dominio se dobla con un stub via dependency override:
 el router se prueba sin PyPDF2 ni I/O. Los handlers de excepciones se
@@ -14,23 +14,26 @@ from core.exceptions import (
     EmptyExtractionError,
     FileTooLargeError,
 )
-from domain.ports.text_extractor import TextExtractor
+from domain.models.extraction_result import ExtractionResult
+from domain.ports.text_extractor import PdfToMarkdown
 
 
-class StubExtractor(TextExtractor):
-    """Extractor doble: devuelve texto fijo o lanza un error."""
+class StubExtractor(PdfToMarkdown):
+    """Extractor doble: devuelve un resultado fijo o lanza un error."""
 
     def __init__(self, result: str = "texto del pdf", error: Exception | None = None):
         self._result = result
         self._error = error
 
-    def extract(self, content: bytes, filename: str) -> str:
+    def extract(self, content: bytes, filename: str) -> ExtractionResult:
         if self._error is not None:
             raise self._error
-        return self._result
+        return ExtractionResult(
+            markdown=self._result, page_count=1, pages_processed=1, duration_ms=1.0
+        )
 
 
-def make_client(extractor: TextExtractor) -> TestClient:
+def make_client(extractor: PdfToMarkdown) -> TestClient:
     from api.app import create_app
     from api.dependencies import get_document_service
 
@@ -41,7 +44,7 @@ def make_client(extractor: TextExtractor) -> TestClient:
     return TestClient(app, raise_server_exceptions=False)
 
 
-def _service_from(extractor: TextExtractor):
+def _service_from(extractor: PdfToMarkdown):
     from domain.services.document_service import DocumentService
 
     return DocumentService(extractor)
@@ -55,11 +58,15 @@ def valid_body() -> dict:
 
 
 class TestHappyPath:
-    def test_returns_200_with_extracted_text(self):
+    def test_returns_200_with_extracted_markdown(self):
         client = make_client(StubExtractor(result="hola mundo"))
         response = client.post("/api/v1/extract", json=valid_body())
         assert response.status_code == 200
-        assert response.json() == {"filename": "reporte.pdf", "text": "hola mundo"}
+        assert response.json() == {
+            "filename": "reporte.pdf",
+            "markdown": "hola mundo",
+            "page_count": 1,
+        }
 
     def test_content_type_is_json(self):
         client = make_client(StubExtractor())
@@ -90,13 +97,13 @@ class TestValidationErrors:
 
 class TestDomainErrors:
     def test_corrupt_file_returns_400_with_error_response(self):
-        extractor = StubExtractor(error=CorruptFileError("pdf dañado"))
+        extractor = StubExtractor(error=CorruptFileError("pdf daÃ±ado"))
         client = make_client(extractor)
         response = client.post("/api/v1/extract", json=valid_body())
         assert response.status_code == 400
         body = response.json()
         assert body["error_code"] == "CORRUPT_FILE"
-        assert "pdf dañado" in body["message"]
+        assert "pdf daÃ±ado" in body["message"]
 
     def test_file_too_large_returns_413_with_error_response(self):
         extractor = StubExtractor(error=FileTooLargeError("excede 10 MB"))

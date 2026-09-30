@@ -1,9 +1,8 @@
 """Tests de dominio puro para DocumentService.
 
 El extractor se simula con ``unittest.mock`` anclado al contrato
-``TextExtractor`` (``spec=``): sin PDFs reales, sin base64, sin PyPDF2.
-Esa lógica pertenece a la frontera (api/) y a los adaptadores; aqui
-solo se verifica el contrato de delegación del dominio.
+``PdfToMarkdown`` (``spec=``): sin PDFs reales, sin base64, sin pdfium.
+Aquí solo se verifica el contrato de delegación del dominio.
 """
 
 from unittest.mock import Mock
@@ -11,55 +10,62 @@ from unittest.mock import Mock
 import pytest
 
 from core.exceptions import CorruptFileError, EmptyExtractionError
-from domain.ports.text_extractor import TextExtractor
+from domain.models.extraction_result import ExtractionResult
+from domain.ports.text_extractor import PdfToMarkdown
 from domain.services.document_service import DocumentService
 
-EXTRACTED_TEXT = "texto extraído"
+RESULT = ExtractionResult(
+    markdown="texto extraído",
+    page_count=2,
+    pages_processed=2,
+    duration_ms=7.5,
+)
 
 
 @pytest.fixture
 def extractor() -> Mock:
     """Doble del puerto: cumple el contrato por construction (spec)."""
-    return Mock(spec=TextExtractor)
+    return Mock(spec=PdfToMarkdown)
 
 
 class TestHappyPath:
-    def test_returns_text_from_extractor(self, extractor):
-        extractor.extract.return_value = EXTRACTED_TEXT
+    def test_returns_enriched_result_from_extractor(self, extractor):
+        extractor.extract.return_value = RESULT
         service = DocumentService(extractor)
 
-        result = service.extract_text(content=b"%PDF-1.4 ...", filename="doc.pdf")
+        result = service.extract(content=b"%PDF-1.4 ...", filename="doc.pdf")
 
-        assert result == EXTRACTED_TEXT
+        assert result == RESULT
 
     def test_delegates_exact_content_and_filename(self, extractor):
-        extractor.extract.return_value = "ok"
+        extractor.extract.return_value = RESULT
         service = DocumentService(extractor)
         content = b"%PDF-1.4 bytes crudos"
         filename = "reporte.pdf"
 
-        service.extract_text(content, filename)
+        service.extract(content, filename)
 
         extractor.extract.assert_called_once_with(content, filename)
 
 
 class TestErrorPropagation:
     @pytest.mark.parametrize(
-        "domain_error",
+        ("error_class", "error_code"),
         [
-            CorruptFileError("pdf dañado"),
-            EmptyExtractionError("sin texto"),
+            (CorruptFileError, "CORRUPT_FILE"),
+            (EmptyExtractionError, "EMPTY_EXTRACTION"),
         ],
         ids=["corrupt-file", "empty-extraction"],
     )
     def test_rethrows_extractor_domain_errors_unchanged(
-        self, extractor, domain_error
+        self, extractor, error_class, error_code
     ):
+        domain_error = error_class("fallo")
         extractor.extract.side_effect = domain_error
         service = DocumentService(extractor)
 
-        with pytest.raises(type(domain_error)) as exc_info:
-            service.extract_text(b"contenido", "doc.pdf")
+        with pytest.raises(error_class) as exc_info:
+            service.extract(b"contenido", "doc.pdf")
 
         assert exc_info.value is domain_error
 
@@ -68,20 +74,9 @@ class TestTrustsInput:
     def test_does_not_validate_content_or_filename(self, extractor):
         """El servicio no valida formato ni tamaño: esa lógica es del
         orquestador en la frontera. Cualquier entrada se delega tal cual."""
-        extractor.extract.return_value = "algo"
+        extractor.extract.return_value = RESULT
         service = DocumentService(extractor)
 
-        service.extract_text(content=b"", filename="")
+        service.extract(content=b"", filename="")
 
         extractor.extract.assert_called_once_with(b"", "")
-
-    def test_never_sees_base64_or_json(self, extractor):
-        """La frontera decodifica el transporte: si llegara base64 sin
-        decodificar, para el dominio son solo bytes opacos."""
-        extractor.extract.return_value = "algo"
-        service = DocumentService(extractor)
-        raw = b"JVBERi0xLjQ="
-
-        service.extract_text(raw, "doc.pdf")
-
-        extractor.extract.assert_called_once_with(raw, "doc.pdf")

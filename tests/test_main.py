@@ -9,17 +9,18 @@ from fastapi.testclient import TestClient
 import main
 from api.dependencies import get_document_service
 from core.exceptions import CorruptFileError
-from domain.ports.text_extractor import TextExtractor
+from domain.models.extraction_result import ExtractionResult
+from domain.ports.text_extractor import PdfToMarkdown
 from domain.services.document_service import DocumentService
 
 
-class ExplodingExtractor(TextExtractor):
+class ExplodingExtractor(PdfToMarkdown):
     """Doble que lanza la excepción indicada en cada extracción."""
 
     def __init__(self, error: Exception):
         self._error = error
 
-    def extract(self, content: bytes, filename: str) -> str:
+    def extract(self, content: bytes, filename: str) -> ExtractionResult:
         raise self._error
 
 
@@ -62,14 +63,17 @@ class TestManualDIWiring:
     def test_build_document_service_wires_real_extractor(self, pdf_factory):
         service = main.build_document_service()
         assert isinstance(service, DocumentService)
-        text = service.extract_text(pdf_factory("documento real"), "doc.pdf")
-        assert "documento real" in text
+        result = service.extract(pdf_factory("documento real"), "doc.pdf")
+        assert "documento real" in result.markdown
+        assert result.page_count == 1
 
     def test_endpoint_resolves_registered_service(self, client, pdf_factory):
-        """Integración: main → router → DocumentService → PdfTextExtractor."""
+        """Integración: main → router → DocumentService → pdfium."""
         response = client.post("/api/v1/extract", json=request_body(pdf_factory))
         assert response.status_code == 200
-        assert "Hola desde main" in response.json()["text"]
+        payload = response.json()
+        assert "Hola desde main" in payload["markdown"]
+        assert payload["page_count"] == 1
 
 
 class TestRouterRegistration:

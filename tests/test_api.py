@@ -48,16 +48,17 @@ class TestProductionWiring:
 
 
 class TestHappyPath:
-    def test_valid_pdf_returns_200_with_extracted_text(self, client):
+    def test_valid_pdf_returns_200_with_extracted_markdown(self, client):
         pdf = pdf_with_text(EXPECTED_TEXT)
 
         response = client.post(API_URL, json=extract_body(pdf))
 
         assert response.status_code == 200
         payload = response.json()
-        assert set(payload) == {"filename", "text"}
+        assert set(payload) == {"filename", "markdown", "page_count"}
         assert payload["filename"] == "doc.pdf"
-        assert EXPECTED_TEXT in payload["text"]
+        assert EXPECTED_TEXT in payload["markdown"]
+        assert payload["page_count"] == 1
 
     def test_scanned_pdf_returns_422_empty_extraction(self, client):
         """PDF legible pero sin capa de texto: error de dominio E2E."""

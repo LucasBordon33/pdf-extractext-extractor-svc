@@ -67,12 +67,19 @@ class ExtractResponse(BaseModel):
 
     model_config = {
         "json_schema_extra": {
-            "example": {"filename": "reporte.pdf", "text": "texto extraido"}
+            "example": {
+                "filename": "reporte.pdf",
+                "markdown": "texto extraido del documento",
+                "page_count": 3,
+            }
         }
     }
 
     filename: str = Field(description="Nombre del archivo procesado.")
-    text: str = Field(description="Texto plano extraido del documento.")
+    markdown: str = Field(description="Documento Markdown completo extraido.")
+    page_count: int = Field(
+        description="Páginas totales del documento procesado.", ge=1
+    )
 
 
 class ErrorResponse(BaseModel):

@@ -1,15 +1,16 @@
-"""Tests de integración controlada del adaptador PdfTextExtractor.
+"""Tests de integración controlada del adaptador PdfiumPdfToMarkdown.
 
 "Controlada": PDFs generados en memoria por ``tests/fixtures/pdf_factory``
-(sin I/O de disco), procesados por el extractor REAL (PyPDF2). El dominio
+(sin I/O de disco), procesados por el extractor REAL (pdfium). El dominio
 no participa: aquí se valida el adaptador contra el contrato del puerto.
 """
 
 import pytest
 
-from adapters.extractors.pdf_extractor import PdfTextExtractor
+from adapters.extractors.pdf_extractor import PdfiumPdfToMarkdown
 from core.exceptions import CorruptFileError, EmptyExtractionError
-from domain.ports.text_extractor import TextExtractor
+from domain.models.extraction_result import ExtractionResult
+from domain.ports.text_extractor import PdfToMarkdown
 from tests.fixtures.pdf_factory import (
     blank_pdf,
     encrypted_pdf,
@@ -18,36 +19,53 @@ from tests.fixtures.pdf_factory import (
 
 
 @pytest.fixture
-def extractor() -> TextExtractor:
-    return PdfTextExtractor()
+def extractor() -> PdfToMarkdown:
+    return PdfiumPdfToMarkdown()
 
 
 class TestContract:
-    def test_implements_text_extractor_port(self, extractor):
-        assert isinstance(extractor, TextExtractor)
+    def test_implements_pdf_to_markdown_port(self, extractor):
+        assert isinstance(extractor, PdfToMarkdown)
 
 
 class TestSuccessfulExtraction:
-    def test_extracts_text_from_valid_pdf(self, extractor):
-        text = extractor.extract(pdf_with_text("Hola dominio"), "doc.pdf")
-        assert "Hola dominio" in text
+    def test_returns_enriched_extraction_result(self, extractor):
+        result = extractor.extract(pdf_with_text("Hola dominio"), "doc.pdf")
 
-    def test_returns_string_type(self, extractor):
+        assert isinstance(result, ExtractionResult)
+        assert "Hola dominio" in result.markdown
+        assert result.page_count == 1
+        assert result.pages_processed == 1
+
+    def test_duration_ms_is_measured_and_non_negative(self, extractor):
         result = extractor.extract(pdf_with_text("abc"), "doc.pdf")
-        assert isinstance(result, str)
 
-    def test_concatenates_text_from_all_pages(self, extractor):
+        assert result.duration_ms >= 0.0
+
+    def test_reports_page_count_of_multipage_pdf(self, extractor):
         pdf = pdf_with_text("pagina uno", "pagina dos")
-        text = extractor.extract(pdf, "multi.pdf")
-        assert "pagina uno" in text
-        assert "pagina dos" in text
+        result = extractor.extract(pdf, "multi.pdf")
+
+        assert result.page_count == 2
+        assert "pagina uno" in result.markdown
+        assert "pagina dos" in result.markdown
 
     def test_preserves_page_order(self, extractor):
         """Pin de línea de base (ISSUE-022): el orden de páginas se
         conserva en el texto concatenado."""
         pdf = pdf_with_text("primero", "segundo")
-        text = extractor.extract(pdf, "orden.pdf")
-        assert text.index("primero") < text.index("segundo")
+        result = extractor.extract(pdf, "orden.pdf")
+
+        assert result.markdown.index("primero") < result.markdown.index("segundo")
+
+    def test_pages_processed_excludes_pages_without_text(self, extractor):
+        """Una página en blanco dentro de un PDF mixto no aporta texto:
+        page_count la cuenta, pages_processed no."""
+        pdf = pdf_with_text("", "con texto")
+        result = extractor.extract(pdf, "mixto.pdf")
+
+        assert result.page_count == 2
+        assert result.pages_processed == 1
 
 
 class TestCorruptPdfs:

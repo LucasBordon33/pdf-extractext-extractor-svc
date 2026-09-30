@@ -1,23 +1,23 @@
-"""Servicio de dominio: extracción de texto de documentos.
+"""Servicio de dominio: extracción de documentos.
 
-Coordina el flujo de extracción delegando en el puerto ``TextExtractor``
-inyectado. No conoce PyPDF2, HTTP, base64 ni JSON: recibe bytes ya
-decodificados y devuelve texto plano. Los errores son los de dominio
-(``CorruptFileError``, ``EmptyExtractionError``); la traducción a HTTP
-ocurre en la capa API.
+Coordina el flujo delegando en el puerto ``PdfToMarkdown`` inyectado.
+No conoce pdfium, HTTP, base64 ni JSON: recibe bytes ya decodificados
+y devuelve un ``ExtractionResult`` enriquecido. Los errores son los
+de dominio; la traducción a HTTP ocurre en la capa API.
 """
 
-from domain.ports.text_extractor import TextExtractor
+from domain.models.extraction_result import ExtractionResult
+from domain.ports.text_extractor import PdfToMarkdown
 
 
 class DocumentService:
-    """Coordina la extracción de texto delegando en el extractor."""
+    """Coordina la extracción delegando en el adaptador del puerto."""
 
-    def __init__(self, extractor: TextExtractor) -> None:
+    def __init__(self, extractor: PdfToMarkdown) -> None:
         self._extractor = extractor
 
-    def extract_text(self, content: bytes, filename: str) -> str:
-        """Devuelve el texto plano del documento.
+    def extract(self, content: bytes, filename: str) -> ExtractionResult:
+        """Devuelve el resultado enriquecido de la extracción.
 
         :param content: bytes crudos del documento (ya decodificados).
         :param filename: nombre original, usado como contexto de error.
