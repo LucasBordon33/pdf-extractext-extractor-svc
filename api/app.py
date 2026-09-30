@@ -7,7 +7,13 @@ from api.v1.router import router as v1_router
 
 
 def create_app() -> FastAPI:
-    """Construye la app lista para servir o testear."""
+    """Construye la app lista para servir o testear.
+
+    Nota: no se usa ``ORJSONResponse`` — FastAPI moderno serializa
+    directo a JSON via Pydantic con ``response_model`` (mas rapido).
+    ``orjson`` queda disponible en el stack para serializacion manual
+    de payloads grandes (R2).
+    """
     app = FastAPI(
         title="pdf-extractext-extractor-svc",
         version="0.1.0",

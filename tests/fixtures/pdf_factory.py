@@ -28,7 +28,9 @@ def pdf_with_text(*page_texts: str) -> bytes:
         + str(page_count).encode() + b" >>",
         font_id: b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
     }
-    for page_id, content_id, text in zip(page_ids, content_ids, page_texts):
+    for page_id, content_id, text in zip(
+        page_ids, content_ids, page_texts, strict=True
+    ):
         stream = f"BT /F1 12 Tf 10 40 Td ({text}) Tj ET".encode()
         objects[page_id] = (
             b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 72 72] "

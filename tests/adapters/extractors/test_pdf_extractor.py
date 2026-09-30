@@ -42,6 +42,13 @@ class TestSuccessfulExtraction:
         assert "pagina uno" in text
         assert "pagina dos" in text
 
+    def test_preserves_page_order(self, extractor):
+        """Pin de línea de base (ISSUE-022): el orden de páginas se
+        conserva en el texto concatenado."""
+        pdf = pdf_with_text("primero", "segundo")
+        text = extractor.extract(pdf, "orden.pdf")
+        assert text.index("primero") < text.index("segundo")
+
 
 class TestCorruptPdfs:
     @pytest.mark.parametrize(
