@@ -26,6 +26,7 @@ def _build_service() -> DocumentService:
     pool = ThreadPoolExtractionPool(
         max_workers=settings.extraction_pool_size,
         max_concurrent=settings.max_concurrent_extractions,
+        max_queue_depth=settings.queue_max_size,
     )
     return DocumentService(
         PdfTextExtractor(),

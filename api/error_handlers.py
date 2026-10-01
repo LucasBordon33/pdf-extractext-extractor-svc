@@ -7,7 +7,8 @@ El dominio no participa: solo expone ``error_code`` y ``status_http``.
 Mapeo global:
 
 - RequestValidationError / ValueError → 422
-- DocumentExtractionError (y subclases) → el status declarado por el dominio
+- DocumentExtractionError (y subclases) → el status declarado por el
+  dominio, más el header ``Retry-After`` si la excepción lo define
 - RuntimeError → 400
 - MemoryError → 413
 - Exception → 500 (mensaje generico, sin filtrar internos)
@@ -60,7 +61,11 @@ async def _validation_error_handler(
 async def _domain_error_handler(
     request: Request, exc: DocumentExtractionError
 ) -> JSONResponse:
-    return _error_response(exc.status_http, exc.error_code, str(exc))
+    response = _error_response(exc.status_http, exc.error_code, str(exc))
+    # 429/503 le dicen al cliente cuando reintentar; el resto no lleva header.
+    if exc.retry_after_seconds is not None:
+        response.headers["Retry-After"] = str(exc.retry_after_seconds)
+    return response
 
 
 def _builtin_error_handler(status_code: int, error_code: str):
