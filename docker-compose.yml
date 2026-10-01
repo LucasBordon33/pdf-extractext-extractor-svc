@@ -1,19 +1,98 @@
+# Orbital del microservicio: el extractor como servicio interno detrás de
+# un Traefik que corre POR FUERA de este archivo (redes external).
+#
+# Formato alineado al del resto de microservicios del proyecto: imagen
+# nombrada y versionada, `expose` en vez de `ports` (el puerto queda solo
+# en la red interna; el acceso entra por el router), rootfs de lectura,
+# sin privilegios, y las redes declaradas como external porque las
+# administra el orquestador.
+#
+# ---------------------------------------------------------------------------
+# REDES (punto C) — requisito de enrutado, no opcional
+# ---------------------------------------------------------------------------
+# El proveedor Docker de Traefik descubre contenedores recorriendo la red en
+# la que está el propio Traefik. El extractor está en `pdf-extractext-network`,
+# así que Traefik TIENE QUE estar conectado también a `pdf-extractext-network`.
+#
+#   Si Traefik está solo en `traefik-net`  -> el extractor no se enruta (404).
+#   Si Traefik está en las dos redes        -> enruta correctamente.
+#
+# Comprobación antes de culpar al código:
+#   docker network inspect pdf-extractext-network --format '{{.Containers}}'
+#   docker network inspect traefik-net            --format '{{.Containers}}'
+# Ambos deben listar el contenedor de Traefik.
+#
+# `traefik-net` se declara para que este archivo participe del proyecto de
+# redes, aunque el extractor no se conecte: la gestiona el orquestador.
+#
+# ---------------------------------------------------------------------------
+# ARRANQUE SIN .env
+# ---------------------------------------------------------------------------
+# `env_file` usa la forma larga con `required: false` (Compose v2.24+): si no
+# existe `.env` el servicio arranca igual y toma los defaults de
+# `core/config.py`. Si existe, sus variables pisan esos defaults.
+#
+# El compose NO repite la configuración del servicio a propósito: la fuente
+# única es `core/config.py` (defaults) + `.env` (overrides). Duplicarla acá
+# en un bloque `environment:` haría que los dos se desincronicen.
+#
+#   cp .env.example .env     # opcional
+#
+# ---------------------------------------------------------------------------
+# OJO — PathPrefix y la ruta real
+# ---------------------------------------------------------------------------
+# El router de la app está montado en `/api/v1/extract`, y el prefijo de
+# esta regla es `/extract`. Traefik hace prefijo literal, así que
+# `/api/v1/extract` NO matchea `PathPrefix(`/extract`)` y el router
+# devuelve 404 a todo el tráfico. Dos formas de cerrarlo:
+#
+#   1. Agregar `stripprefix` al router (Traefik quita `/extract` antes de
+#      reenviar y la app recibe `/api/v1/extract`):
+#        - "traefik.http.routers.extractor.middlewares=extractor-strip"
+#      y definir ese middleware en el config de Traefik:
+#        [http.middlewares.extractor-strip.stripPrefix]
+#          prefixes = ["/extract"]
+#
+#   2. Cambiar el prefijo de esta regla a `/api/v1`, que ya cubre
+#      `/extract` y `/health` sin tocar la app.
+#
+# La opción 2 es la que funciona hoy sin depender del config de Traefik.
+
 services:
   extractor:
-    build: .
-    ports:
-      - "${PORT:-8000}:${PORT:-8000}"
-    environment:
-      PORT: ${PORT:-8000}
-      HOST: ${HOST:-0.0.0.0}
-      MAX_UPLOAD_SIZE_MB: ${MAX_UPLOAD_SIZE_MB:-12}
-      EXTRACT_TIMEOUT_SECONDS: ${EXTRACT_TIMEOUT_SECONDS:-25.0}
-      ADMISSION_TIMEOUT_SECONDS: ${ADMISSION_TIMEOUT_SECONDS:-10.0}
-      UVICORN_WORKERS: ${UVICORN_WORKERS:-2}
-      EXTRACTION_POOL_SIZE: ${EXTRACTION_POOL_SIZE:-2}
-      MAX_CONCURRENT_EXTRACTIONS: ${MAX_CONCURRENT_EXTRACTIONS:-4}
-      QUEUE_MAX_SIZE: ${QUEUE_MAX_SIZE:-64}
-      ALLOWED_MIME_TYPES: ${ALLOWED_MIME_TYPES:-application/pdf}
-      ENV: ${ENV:-development}
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      LOG_FORMAT: ${LOG_FORMAT:-json}
+    build:
+      context: .
+    image: pdf-extractext-service:0.1.0
+    env_file:
+      - path: .env
+        required: false
+    expose:
+      # Debe coincidir con el puerto que bindea el servicio
+      # (Settings.port, default 8000) y con la label del loadbalancer.
+      - "${PORT:-8000}"
+    read_only: true
+    tmpfs:
+      - /tmp:size=10m
+    security_opt:
+      - no-new-privileges:true
+    # 256m es el valor del servicio de referencia, pero acá cada request
+    # con un PDF de ~9 MB en base64 ocupa del orden de 30 MB en memoria:
+    # con ráfagas de VUs, 256m muere por OOM. 512m es el punto de partida;
+    # subir hasta medir con la prueba del TP.
+    mem_limit: ${MEM_LIMIT:-512m}
+    restart: unless-stopped
+    networks:
+      - pdf-extractext-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.extractor.rule=Host(`${EXTRACTOR_HOST:-universidad.localhost}`) && PathPrefix(`/extract`)"
+      - "traefik.http.routers.extractor.entrypoints=websecure"
+      - "traefik.http.routers.extractor.tls=true"
+      - "traefik.http.routers.extractor.priority=100"
+      - "traefik.http.services.extractor.loadbalancer.server.port=${PORT:-8000}"
+
+networks:
+  traefik-net:
+    external: true
+  pdf-extractext-network:
+    external: true
