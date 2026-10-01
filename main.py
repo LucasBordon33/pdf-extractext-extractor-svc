@@ -48,7 +48,17 @@ app = create_application()
 
 
 def run() -> None:
-    """Arranca el servidor con la configuración del entorno."""
+    """Arranca el servidor con la configuración del entorno.
+
+    ``limit_concurrency`` es **por proceso**: con ``UVICORN_WORKERS``
+    workers el tope efectivo es ``workers x http_limit_concurrency``.
+    Uvicorn responde 503 en texto plano, sin ``Retry-After``, y cierra
+    la conexión, así que ese cuerpo NO es un ``ErrorResponse``.
+
+    El access log se deja activo a propósito: hoy es la única línea por
+    request que emite el servicio. Desactivarlo antes del middleware de
+    ISSUE-014 dejaría el runtime sin observabilidad.
+    """
     settings = get_settings()
     uvicorn.run(
         "main:app",
@@ -56,6 +66,9 @@ def run() -> None:
         port=settings.port,
         workers=settings.uvicorn_workers,
         log_level=settings.log_level.lower(),
+        limit_concurrency=settings.http_limit_concurrency,
+        timeout_keep_alive=settings.http_timeout_keep_alive,
+        access_log=settings.http_access_log,
     )
 
 

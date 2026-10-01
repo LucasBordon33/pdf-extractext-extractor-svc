@@ -74,6 +74,32 @@ class Settings(BaseSettings):
         description="Tope de trabajos pendientes en el pool; al superarlo -> 503.",
     )
 
+    # --- Límites del runtime HTTP (ADR-TP-7) ---
+    # Uvicorn, no FastAPI: controlan el servidor antes de que la app vea
+    # el request.
+    http_limit_concurrency: int | None = Field(
+        default=None,
+        gt=0,
+        description=(
+            "Conexiones simultaneas por PROCESO antes de responder 503."
+            " Con N workers el tope efectivo es N por este valor."
+            " None = sin limite (solo desarrollo)."
+        ),
+    )
+    http_timeout_keep_alive: float = Field(
+        default=5.0,
+        gt=0,
+        description="Keep-alive ocioso, en segundos.",
+    )
+    http_access_log: bool = Field(
+        default=True,
+        description=(
+            "Access log de Uvicorn por request. Desactivarlo quita la"
+            " unica linea por request que hay hoy: hacerlo solo junto"
+            " con el middleware de ISSUE-014."
+        ),
+    )
+
     # --- Formatos ---
     allowed_mime_types: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: list(DEFAULT_ALLOWED_MIME_TYPES),
@@ -96,6 +122,14 @@ class Settings(BaseSettings):
                 raise ValueError("ALLOWED_MIME_TYPES contiene entradas vacías")
             return parts
         return value
+
+    @field_validator("http_limit_concurrency", mode="before")
+    @classmethod
+    def _blank_limit_means_no_limit(cls, value: object) -> object:
+        """En un ``.env`` dejar el valor vacío es la forma natural de
+        desactivar el tope; sin esto Pydantic no lo castea a ``int | None``.
+        """
+        return None if value == "" else value
 
     @property
     def is_production(self) -> bool:

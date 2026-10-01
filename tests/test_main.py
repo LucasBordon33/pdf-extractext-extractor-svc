@@ -83,6 +83,58 @@ class TestRouterRegistration:
         assert "/api/v1/extract" in paths
 
 
+class TestUvicornRuntimeLimits:
+    """``run()`` es el unico lugar donde el runtime HTTP se configura.
+
+    Se espía ``uvicorn.run`` en vez de levantar un server: los kwargs
+    son el contrato con Uvicorn (ADR-TP-7) y probarlos asi es barato
+    y determinista.
+    """
+
+    @pytest.fixture
+    def run_kwargs(self, monkeypatch):
+        captured: dict = {}
+
+        def fake_run(app, **kwargs):
+            captured["app"] = app
+            captured.update(kwargs)
+
+        monkeypatch.setattr(main.uvicorn, "run", fake_run)
+        return captured
+
+    def test_binds_host_and_port_from_the_environment(self, run_kwargs):
+        main.run()
+
+        assert run_kwargs["app"] == "main:app"
+        assert run_kwargs["host"] == main.get_settings().host
+        assert run_kwargs["port"] == main.get_settings().port
+
+    def test_passes_http_runtime_limits(self, run_kwargs):
+        main.run()
+
+        settings = main.get_settings()
+        assert run_kwargs["limit_concurrency"] == settings.http_limit_concurrency
+        assert run_kwargs["timeout_keep_alive"] == settings.http_timeout_keep_alive
+        assert run_kwargs["access_log"] == settings.http_access_log
+
+    def test_keeps_the_access_log_enabled_by_default(self, run_kwargs):
+        """Desactivarlo quitaría la unica linea por request que hay."""
+        main.run()
+
+        assert run_kwargs["access_log"] is True
+
+    def test_passes_worker_count_from_the_environment(self, run_kwargs):
+        main.run()
+
+        assert run_kwargs["workers"] == main.get_settings().uvicorn_workers
+
+    def test_no_limit_concurrency_is_passed_as_none(self, run_kwargs):
+        """Sin tope, Uvicorn no debe recibir un numero inventado."""
+        main.run()
+
+        assert run_kwargs["limit_concurrency"] is None
+
+
 class TestGlobalExceptionHandlers:
     def test_value_error_returns_422(self, client, fail_with, pdf_factory):
         fail_with(ValueError("valor invalido"))

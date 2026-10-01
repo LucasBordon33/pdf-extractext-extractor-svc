@@ -33,6 +33,14 @@ class TestDefaults:
         assert settings.queue_max_size == 64
         assert settings.admission_timeout_seconds == 10.0
 
+    def test_http_limits_are_off_by_default(self):
+        """Sin tope de concurrencia ni timeout de keep-alive impuestos:
+        el servicio arranca sin limitar el runtime en desarrollo."""
+        settings = Settings()
+        assert settings.http_limit_concurrency is None
+        assert settings.http_timeout_keep_alive == 5.0
+        assert settings.http_access_log is True
+
     def test_does_not_require_any_env_variable(self):
         Settings()  # no debe lanzar
 
@@ -79,6 +87,24 @@ class TestLoadingFromEnvironment:
         monkeypatch.setenv("LOG_FORMAT", "text")
         assert Settings().log_format == "text"
 
+    def test_reads_http_runtime_limits_from_environment(self, monkeypatch):
+        monkeypatch.setenv("HTTP_LIMIT_CONCURRENCY", "6")
+        monkeypatch.setenv("HTTP_TIMEOUT_KEEP_ALIVE", "2.5")
+        monkeypatch.setenv("HTTP_ACCESS_LOG", "false")
+
+        settings = Settings()
+
+        assert settings.http_limit_concurrency == 6
+        assert settings.http_timeout_keep_alive == 2.5
+        assert settings.http_access_log is False
+
+    def test_blank_limit_concurrency_means_no_limit(self, monkeypatch):
+        """Un valor vacío apaga el tope (uvicorn directo; por compose no
+        llega vacío porque ``${VAR:-6}`` lo reemplaza)."""
+        monkeypatch.setenv("HTTP_LIMIT_CONCURRENCY", "")
+
+        assert Settings().http_limit_concurrency is None
+
     def test_reads_mime_types_as_comma_separated_list(self, monkeypatch):
         monkeypatch.setenv("ALLOWED_MIME_TYPES", "application/pdf, image/pdf")
 
@@ -99,6 +125,24 @@ class TestValidation:
 
     def test_rejects_non_positive_timeout(self, monkeypatch):
         monkeypatch.setenv("EXTRACT_TIMEOUT_SECONDS", "-1")
+        with pytest.raises(ValidationError):
+            Settings()
+
+    @pytest.mark.parametrize(
+        ("variable", "value"),
+        [
+            ("HTTP_LIMIT_CONCURRENCY", "0"),
+            ("HTTP_LIMIT_CONCURRENCY", "-3"),
+            ("HTTP_TIMEOUT_KEEP_ALIVE", "0"),
+        ],
+    )
+    def test_rejects_non_positive_http_limits(self, monkeypatch, variable, value):
+        monkeypatch.setenv(variable, value)
+        with pytest.raises(ValidationError):
+            Settings()
+
+    def test_rejects_non_numeric_limit_concurrency(self, monkeypatch):
+        monkeypatch.setenv("HTTP_LIMIT_CONCURRENCY", "muchas")
         with pytest.raises(ValidationError):
             Settings()
 
