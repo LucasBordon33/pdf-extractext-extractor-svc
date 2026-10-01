@@ -50,7 +50,10 @@ class Settings(BaseSettings):
     admission_timeout_seconds: float = Field(
         default=10.0,
         gt=0,
-        description="Espera maxima por un lugar de extraccion (ADR-TP-6/7).",
+        description=(
+            "Espera maxima por un lugar de extraccion; agotada -> 429"
+            " (ADR-TP-6/7). Debe quedar por debajo del timeout del cliente."
+        ),
     )
 
     # --- Concurrencia (ADR-TP-5) ---
@@ -61,12 +64,14 @@ class Settings(BaseSettings):
         default=2, ge=1, description="Tamaño del pool que ejecuta la extraccion."
     )
     max_concurrent_extractions: int = Field(
-        default=4, ge=1, description="Semaforo de extracciones por proceso."
+        default=4,
+        ge=1,
+        description="Lugares de extraccion por proceso; acota la admision y la cola.",
     )
     queue_max_size: int = Field(
         default=64,
         ge=1,
-        description="Tope de la cola de admision; al superarlo → 503.",
+        description="Tope de trabajos pendientes en el pool; al superarlo -> 503.",
     )
 
     # --- Formatos ---

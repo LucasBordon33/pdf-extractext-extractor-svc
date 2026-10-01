@@ -27,6 +27,8 @@ def make_document_service(
     *,
     max_upload_size_mb: int = 12,
     extract_timeout_seconds: float = 25.0,
+    max_concurrent_extractions: int = 4,
+    admission_timeout_seconds: float = 10.0,
 ):
     """Construye un DocumentService con defaults de prueba."""
     from domain.services.document_service import DocumentService
@@ -36,4 +38,6 @@ def make_document_service(
         pool if pool is not None else ImmediateExtractionPool(),
         max_upload_size_mb=max_upload_size_mb,
         extract_timeout_seconds=extract_timeout_seconds,
+        max_concurrent_extractions=max_concurrent_extractions,
+        admission_timeout_seconds=admission_timeout_seconds,
     )

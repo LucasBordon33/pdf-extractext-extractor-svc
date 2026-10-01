@@ -18,11 +18,13 @@ from core.exceptions import (
     EmptyExtractionError,
     ExtractionTimeoutError,
     FileTooLargeError,
+    OverloadedError,
+    QueueSaturatedError,
 )
 from domain.models.extraction_result import ExtractionResult
 from domain.ports.extraction_pool import ExtractionPool
 from domain.ports.text_extractor import PdfToMarkdown
-from tests.doubles import make_document_service
+from tests.doubles import ImmediateExtractionPool, make_document_service
 
 RESULT = ExtractionResult(
     markdown="texto", page_count=1, pages_processed=1, duration_ms=1.0
@@ -66,6 +68,87 @@ class NeverCompletingPool(ExtractionPool):
         self, work: Callable[[], ExtractionResult]
     ) -> Future[ExtractionResult]:
         return self.spy
+
+
+class BlockingExtractor:
+    """Extractor que anuncia su entrada y espera a que lo liberen.
+
+    Permite ocupar un lugar de admision desde otro hilo de forma
+    determinista, sin dormir y depender de la suerte del scheduler.
+    """
+
+    def __init__(self) -> None:
+        self.entered = threading.Event()
+        self.released = threading.Event()
+
+    def extract(self, content: bytes, filename: str) -> ExtractionResult:
+        self.entered.set()
+        if not self.released.wait(5):
+            raise AssertionError("el test no libero el extractor")
+        return RESULT
+
+    def hold_slot(self, service, errors: list) -> threading.Thread:
+        """Ocupa un lugar de admision hasta que se llame ``release()``."""
+        thread = threading.Thread(
+            target=lambda: errors.append(
+                _capture(service.extract, b"%PDF-1.4", "ocupa.pdf")
+            )
+        )
+        thread.start()
+        assert self.entered.wait(5), "el extractor nunca empezo a trabajar"
+        return thread
+
+    def release(self) -> None:
+        self.released.set()
+
+
+class TimeoutOncePool(ExtractionPool):
+    """El primer trabajo nunca completa; el siguiente sí.
+
+    Permite comprobar que el lugar de admision se devuelve tras un
+    deadline vencido, sin acoplar el test a los internos del servicio.
+    """
+
+    def __init__(self) -> None:
+        self._calls = 0
+        self._executor = ThreadPoolExecutor(max_workers=1)
+
+    def submit(
+        self, work: Callable[[], ExtractionResult]
+    ) -> Future[ExtractionResult]:
+        self._calls += 1
+        if self._calls == 1:
+            return Future()
+        return self._executor.submit(work)
+
+
+class RejectOncePool(ExtractionPool):
+    """Rechaza el primer trabajo con saturación; el siguiente pasa.
+
+    El rechazo ocurre ya con el lugar de admision tomado, así que
+    sirve para verificar que ese lugar también se devuelve.
+    """
+
+    def __init__(self) -> None:
+        self._inner = ImmediateExtractionPool()
+        self._calls = 0
+
+    def submit(
+        self, work: Callable[[], ExtractionResult]
+    ) -> Future[ExtractionResult]:
+        self._calls += 1
+        if self._calls == 1:
+            raise QueueSaturatedError("llena", retry_after_seconds=1)
+        return self._inner.submit(work)
+
+
+def _capture(call, *args) -> Exception | None:
+    """Ejecuta ``call`` y devuelve la excepción, o ``None`` si tuvo éxito."""
+    try:
+        call(*args)
+    except Exception as error:
+        return error
+    return None
 
 
 class TestHappyPath:
@@ -127,6 +210,165 @@ class TestDeadline:
             service.extract(b"x", "doc.pdf")
 
         assert exc_info.value.retry_after_seconds == 3
+
+
+class TestAdmission:
+    """Espera acotada por un lugar de extraccion (429 ``OverloadedError``)."""
+
+    def test_busy_service_rejects_with_overloaded_after_the_timeout(self):
+        extractor = BlockingExtractor()
+        service = make_document_service(
+            extractor,
+            pool=RecordingPool(),
+            max_concurrent_extractions=1,
+            admission_timeout_seconds=0.05,
+        )
+        errors: list = []
+        holder = extractor.hold_slot(service, errors)
+
+        with pytest.raises(OverloadedError) as exc_info:
+            service.extract(b"%PDF-1.4", "doc.pdf")
+
+        extractor.release()
+        holder.join(timeout=5)
+        assert errors == [None]
+        assert "doc.pdf" in str(exc_info.value)
+
+    def test_overloaded_error_tells_the_client_to_retry(self):
+        extractor = BlockingExtractor()
+        service = make_document_service(
+            extractor,
+            pool=RecordingPool(),
+            max_concurrent_extractions=1,
+            admission_timeout_seconds=0.05,
+        )
+        errors: list = []
+        holder = extractor.hold_slot(service, errors)
+
+        with pytest.raises(OverloadedError) as exc_info:
+            service.extract(b"%PDF-1.4", "doc.pdf")
+
+        extractor.release()
+        holder.join(timeout=5)
+        assert exc_info.value.retry_after_seconds == 1
+
+    def test_waiting_request_is_admitted_once_a_slot_frees_up(self):
+        extractor = BlockingExtractor()
+        service = make_document_service(
+            extractor,
+            pool=RecordingPool(),
+            max_concurrent_extractions=1,
+            admission_timeout_seconds=5.0,
+        )
+        errors: list = []
+        holder = extractor.hold_slot(service, errors)
+        waiters: list = []
+        admitted = threading.Event()
+
+        def wait_for_slot() -> None:
+            waiters.append(_capture(service.extract, b"%PDF-1.4", "lento.pdf"))
+            admitted.set()
+
+        waiter = threading.Thread(target=wait_for_slot)
+        waiter.start()
+        # El segundo request no debe resolver mientras el lugar esta ocupado.
+        assert not admitted.wait(0.2), "admitio antes de que se liberara el lugar"
+
+        extractor.release()
+        holder.join(timeout=5)
+        waiter.join(timeout=5)
+
+        assert admitted.is_set()
+        assert waiters == [None]
+
+    def test_rejected_request_never_reaches_the_pool(self):
+        extractor = BlockingExtractor()
+        pool = RecordingPool()
+        service = make_document_service(
+            extractor,
+            pool=pool,
+            max_concurrent_extractions=1,
+            admission_timeout_seconds=0.05,
+        )
+        errors: list = []
+        holder = extractor.hold_slot(service, errors)
+
+        with pytest.raises(OverloadedError):
+            service.extract(b"%PDF-1.4", "doc.pdf")
+
+        extractor.release()
+        holder.join(timeout=5)
+        assert pool.submitted == 1
+
+    def test_oversized_request_does_not_hold_a_slot(self):
+        """El tamano se valida antes de admitir: un 413 no ocupa lugar."""
+        extractor = Mock(spec=PdfToMarkdown)
+        pool = RecordingPool()
+        service = make_document_service(
+            extractor, pool=pool, max_upload_size_mb=1, max_concurrent_extractions=1
+        )
+
+        for _ in range(3):
+            with pytest.raises(FileTooLargeError):
+                service.extract(JUST_OVER_1_MB, "grande.pdf")
+
+        extractor.extract.return_value = RESULT
+        assert service.extract(b"x", "doc.pdf") == RESULT
+
+
+class TestSlotIsAlwaysReturned:
+    """Una fuga de lugar degrada el servicio de forma irreversible."""
+
+    def test_slot_returns_after_success(self):
+        extractor = Mock(spec=PdfToMarkdown)
+        extractor.extract.return_value = RESULT
+        service = make_document_service(
+            extractor, max_concurrent_extractions=1
+        )
+
+        for _ in range(3):
+            assert service.extract(b"x", "doc.pdf") == RESULT
+
+    def test_slot_returns_after_extractor_error(self):
+        extractor = Mock(spec=PdfToMarkdown)
+        extractor.extract.side_effect = CorruptFileError("roto")
+        service = make_document_service(
+            extractor, max_concurrent_extractions=1
+        )
+
+        with pytest.raises(CorruptFileError):
+            service.extract(b"x", "doc.pdf")
+
+        extractor.extract.side_effect = None
+        extractor.extract.return_value = RESULT
+        assert service.extract(b"x", "doc.pdf") == RESULT
+
+    def test_slot_returns_after_deadline(self):
+        extractor = Mock(spec=PdfToMarkdown)
+        extractor.extract.return_value = RESULT
+        service = make_document_service(
+            extractor,
+            pool=TimeoutOncePool(),
+            extract_timeout_seconds=0.05,
+            max_concurrent_extractions=1,
+        )
+
+        with pytest.raises(ExtractionTimeoutError):
+            service.extract(b"x", "doc.pdf")
+
+        assert service.extract(b"x", "doc.pdf") == RESULT
+
+    def test_slot_returns_after_pool_rejection(self):
+        extractor = Mock(spec=PdfToMarkdown)
+        extractor.extract.return_value = RESULT
+        service = make_document_service(
+            extractor, pool=RejectOncePool(), max_concurrent_extractions=1
+        )
+
+        with pytest.raises(QueueSaturatedError):
+            service.extract(b"x", "doc.pdf")
+
+        assert service.extract(b"x", "doc.pdf") == RESULT
 
 
 class TestFileSize:

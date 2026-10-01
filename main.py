@@ -32,6 +32,8 @@ def build_document_service() -> DocumentService:
         pool,
         max_upload_size_mb=settings.max_upload_size_mb,
         extract_timeout_seconds=settings.extract_timeout_seconds,
+        max_concurrent_extractions=settings.max_concurrent_extractions,
+        admission_timeout_seconds=settings.admission_timeout_seconds,
     )
 
 

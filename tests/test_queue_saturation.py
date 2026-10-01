@@ -1,12 +1,23 @@
-"""Tests de saturación de la cola de extracción, de punta a punta.
+"""Tests de backpressure de punta a punta: lo que el cliente ve.
 
-``tests/adapters/concurrency/test_thread_pool.py`` verifica el límite en
-el adaptador. Acá se verifica lo que el cliente ve: una cola llena se
-traduce en 503 con ``Retry-After`` y un mensaje accionable, no en un
-timeout de 30 s del lado de la herramienta de carga (ADR-TP-7).
+Hay dos controles de rechazo y cada uno necesita una configuración
+distinta para poder dispararse, porque se评测 evalúan en momentos
+distintos de la petición:
 
-El extractor es lento a propósito: sin saturar la CPU de verdad, la
-ráfaga de peticiones es la que llena la cola.
+- **Admisión (429)**: el request espera por un lugar de extracción. Si
+  la espera vence → ``OverloadedError``. Se dispara con pocos lugares.
+- **Cola del pool (503)**: el request ya tiene lugar y el trabajo no
+  entra al pool → ``QueueSaturatedError``. Se dispara con cola chica
+  y **muchos** lugares de admisión, porque un lugar por request es lo
+  que vuelve inalcanzable el tope de la cola.
+
+Sin esa distinción ambos tests son invisibles: con un solo lugar de
+admisión nunca se acumulan trabajos pendientes, y con una cola
+generosa nunca se satura. Es también la razón por la que el 503 solo
+es alcanzable si ``QUEUE_MAX_SIZE < MAX_CONCURRENT_EXTRACTIONS``.
+
+El extractor es lento a propósito: la ráfaga de peticiones es la que
+llena los topes, no la CPU.
 """
 
 import base64
@@ -27,18 +38,27 @@ from tests.fixtures.pdf_factory import pdf_with_text
 API_URL = "/api/v1/extract"
 SATURATED_STATUS = 503
 SATURATED_CODE = "QUEUE_SATURATED"
+OVERLOADED_STATUS = 429
+OVERLOADED_CODE = "OVERLOADED"
 RETRY_AFTER = "1"
+CLIENT_TIMEOUT_SECONDS = 30
 
-_EXTRACTION_SECONDS = 1.0
+_DEFAULT_EXTRACTION_SECONDS = 1.0
 
 
 class SlowExtractor(PdfToMarkdown):
     """Extractor que tarda lo suficiente para que la ráfaga se acumule."""
 
+    def __init__(self, seconds: float = _DEFAULT_EXTRACTION_SECONDS) -> None:
+        self._seconds = seconds
+
     def extract(self, content: bytes, filename: str) -> ExtractionResult:
-        time.sleep(_EXTRACTION_SECONDS)
+        time.sleep(self._seconds)
         return ExtractionResult(
-            markdown="contenido", page_count=1, pages_processed=1, duration_ms=1000.0
+            markdown="contenido",
+            page_count=1,
+            pages_processed=1,
+            duration_ms=self._seconds * 1000,
         )
 
 
@@ -47,6 +67,31 @@ def extract_body(content: bytes, filename: str = "doc.pdf") -> dict:
         "filename": filename,
         "content_base64": base64.b64encode(content).decode(),
     }
+
+
+def build_app(
+    *,
+    max_concurrent: int,
+    admission_timeout: float,
+    queue_depth: int,
+    extraction_seconds: float = _DEFAULT_EXTRACTION_SECONDS,
+):
+    """App de un solo proceso con los topes de backpressure a elección."""
+    pool = ThreadPoolExtractionPool(
+        max_workers=1, max_concurrent=1, max_queue_depth=queue_depth
+    )
+    register(
+        DocumentService,
+        DocumentService(
+            SlowExtractor(extraction_seconds),
+            pool,
+            max_upload_size_mb=12,
+            extract_timeout_seconds=25.0,
+            max_concurrent_extractions=max_concurrent,
+            admission_timeout_seconds=admission_timeout,
+        ),
+    )
+    return create_app()
 
 
 def burst(app, payload: dict, requests: int) -> list:
@@ -67,39 +112,47 @@ def burst(app, payload: dict, requests: int) -> list:
         thread.start()
     start.set()
     for thread in threads:
-        thread.join(timeout=30)
+        thread.join(timeout=CLIENT_TIMEOUT_SECONDS)
     return responses
+
+
+def statuses(responses: list) -> list[int]:
+    return sorted(response.status_code for response in responses)
+
+
+def codes(responses: list, status: int) -> list[dict]:
+    return [r.json() for r in responses if r.status_code == status]
+
+
+def payload_for(text: str = "hola") -> dict:
+    return extract_body(pdf_with_text(text))
 
 
 @pytest.fixture
 def saturated_app():
-    """App con un pool de 1 worker y cola de 1: la segunda ráfaga satura."""
-    pool = ThreadPoolExtractionPool(
-        max_workers=1, max_concurrent=1, max_queue_depth=1
+    """Cola de 1 con admision amplia: el tope que salta es el del pool."""
+    return build_app(
+        max_concurrent=8, admission_timeout=10.0, queue_depth=1
     )
-    register(
-        DocumentService,
-        DocumentService(
-            SlowExtractor(),
-            pool,
-            max_upload_size_mb=12,
-            extract_timeout_seconds=25.0,
-        ),
+
+
+@pytest.fixture
+def overloaded_app():
+    """Un solo lugar y espera mínima: el tope que salta es la admisión."""
+    return build_app(
+        max_concurrent=1, admission_timeout=0.05, queue_depth=64
     )
-    return create_app()
 
 
 class TestQueueSaturationIsVisibleToTheClient:
     def test_full_queue_returns_503_instead_of_hanging(self, saturated_app):
-        responses = burst(saturated_app, extract_body(pdf_with_text("hola")), 4)
+        responses = burst(saturated_app, payload_for(), 4)
 
-        statuses = sorted(response.status_code for response in responses)
         assert len(responses) == 4
-        assert statuses[0] == 200
-        assert set(statuses[1:]) == {SATURATED_STATUS}
+        assert statuses(responses) == [200, 503, 503, 503]
 
     def test_saturated_response_carries_retry_after(self, saturated_app):
-        responses = burst(saturated_app, extract_body(pdf_with_text("hola")), 4)
+        responses = burst(saturated_app, payload_for(), 4)
 
         saturated = [r for r in responses if r.status_code == SATURATED_STATUS]
         assert saturated
@@ -107,14 +160,14 @@ class TestQueueSaturationIsVisibleToTheClient:
             assert response.headers["Retry-After"] == RETRY_AFTER
 
     def test_saturated_body_is_a_normalized_error(self, saturated_app):
-        responses = burst(saturated_app, extract_body(pdf_with_text("hola")), 4)
+        responses = burst(saturated_app, payload_for(), 4)
 
-        body = next(
-            r.json() for r in responses if r.status_code == SATURATED_STATUS
-        )
-        assert set(body) == {"error_code", "message"}
-        assert body["error_code"] == SATURATED_CODE
-        assert "cola de extraccion llena" in body["message"]
+        bodies = codes(responses, SATURATED_STATUS)
+        assert len(bodies) == 3
+        for body in bodies:
+            assert set(body) == {"error_code", "message"}
+            assert body["error_code"] == SATURATED_CODE
+            assert "cola de extraccion llena" in body["message"]
 
     def test_rejection_is_fast_enough_to_beat_the_client_timeout(
         self, saturated_app
@@ -123,17 +176,70 @@ class TestQueueSaturationIsVisibleToTheClient:
         externo (30 s en Vegeta), o el cliente expira antes de oírla.
         """
         started = time.monotonic()
-        responses = burst(saturated_app, extract_body(pdf_with_text("hola")), 4)
+        responses = burst(saturated_app, payload_for(), 4)
         elapsed = time.monotonic() - started
 
-        assert any(r.status_code == SATURATED_STATUS for r in responses)
-        assert elapsed < 30
+        assert SATURATED_STATUS in statuses(responses)
+        assert elapsed < CLIENT_TIMEOUT_SECONDS
 
     def test_queue_recovers_after_the_burst_drains(self, saturated_app):
-        burst(saturated_app, extract_body(pdf_with_text("hola")), 4)
+        burst(saturated_app, payload_for(), 4)
 
         with TestClient(saturated_app) as client:
-            recovered = client.post(API_URL, json=extract_body(pdf_with_text("hola")))
+            recovered = client.post(API_URL, json=payload_for())
 
         assert recovered.status_code == 200
         assert "Retry-After" not in recovered.headers
+
+
+class TestAdmissionIsVisibleToTheClient:
+    def test_no_free_slot_returns_429_with_retry_after(self, overloaded_app):
+        responses = burst(overloaded_app, payload_for(), 4)
+
+        assert statuses(responses) == [200, 429, 429, 429]
+        for response in responses:
+            if response.status_code == OVERLOADED_STATUS:
+                assert response.headers["Retry-After"] == RETRY_AFTER
+
+    def test_overloaded_body_is_a_normalized_error(self, overloaded_app):
+        responses = burst(overloaded_app, payload_for(), 4)
+
+        bodies = codes(responses, OVERLOADED_STATUS)
+        assert len(bodies) == 3
+        for body in bodies:
+            assert set(body) == {"error_code", "message"}
+            assert body["error_code"] == OVERLOADED_CODE
+            assert "lugar de extraccion" in body["message"]
+
+    def test_overload_responds_well_before_the_client_timeout(
+        self, overloaded_app
+    ):
+        started = time.monotonic()
+        responses = burst(overloaded_app, payload_for(), 4)
+        elapsed = time.monotonic() - started
+
+        assert OVERLOADED_STATUS in statuses(responses)
+        assert elapsed < CLIENT_TIMEOUT_SECONDS
+
+    def test_request_waits_for_a_slot_and_then_succeeds(self):
+        """Con espera suficiente el 429 no debe aparecer: el trabajo entra."""
+        app = build_app(
+            max_concurrent=1,
+            admission_timeout=10.0,
+            queue_depth=64,
+            extraction_seconds=0.4,
+        )
+
+        responses = burst(app, payload_for(), 2)
+
+        assert statuses(responses) == [200, 200]
+        for response in responses:
+            assert "Retry-After" not in response.headers
+
+    def test_service_recovers_after_the_burst_drains(self, overloaded_app):
+        burst(overloaded_app, payload_for(), 4)
+
+        with TestClient(overloaded_app) as client:
+            recovered = client.post(API_URL, json=payload_for())
+
+        assert recovered.status_code == 200

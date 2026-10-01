@@ -43,6 +43,16 @@ def health() -> dict[str, str]:
             "model": ErrorResponse,
             "description": "Payload invalido o extraccion vacia",
         },
+        status.HTTP_429_TOO_MANY_REQUESTS: {
+            "model": ErrorResponse,
+            "description": "No se logro un lugar de extraccion a tiempo; "
+            "reintentar tras Retry-After",
+        },
+        status.HTTP_503_SERVICE_UNAVAILABLE: {
+            "model": ErrorResponse,
+            "description": "Cola de extraccion o deadline agotados; "
+            "reintentar tras Retry-After",
+        },
         status.HTTP_500_INTERNAL_SERVER_ERROR: {
             "model": ErrorResponse,
             "description": "Error interno inesperado",
