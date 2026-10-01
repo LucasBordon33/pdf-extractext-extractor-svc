@@ -16,12 +16,14 @@ Gestión de memoria bajo carga:
 """
 
 import time
-from collections.abc import Iterator
 from io import BytesIO
 from math import inf
 
 import pypdfium2 as pdfium
 
+from adapters.markdown.block_classifier import classify_blocks
+from adapters.markdown.markdown_builder import build_document, build_page_markdown
+from adapters.markdown.page_segmenter import segment_page
 from core.exceptions import CorruptFileError, EmptyExtractionError
 from domain.models.extraction_result import ExtractionResult
 from domain.ports.text_extractor import PdfToMarkdown
@@ -40,7 +42,7 @@ class PdfTextExtractor(PdfToMarkdown):
         try:
             with pdfium.PdfDocument(BytesIO(content), autoclose=True) as document:
                 page_count = len(document)
-                markdown, pages_processed = self._collect_page_texts(document)
+                page_markdowns, pages_processed = self._render_pages(document)
         except pdfium.PdfiumError as error:
             # PdfiumError hereda de RuntimeError: se traduce SIEMPRE aqui
             # para que la infraestructura no escape del adaptador.
@@ -48,6 +50,7 @@ class PdfTextExtractor(PdfToMarkdown):
                 f"no se pudo procesar el PDF '{filename}': {error}"
             ) from error
         duration_ms = (time.perf_counter() - started) * 1000
+        markdown = build_document(page_markdowns)
         self._ensure_text_found(markdown, filename)
         return ExtractionResult(
             markdown=markdown,
@@ -56,37 +59,26 @@ class PdfTextExtractor(PdfToMarkdown):
             duration_ms=duration_ms,
         )
 
-    def _iter_page_texts(self, document: pdfium.PdfDocument) -> Iterator[str]:
-        """Entrega el texto de cada página de forma perezosa.
+    def _render_pages(self, document: pdfium.PdfDocument) -> tuple[list[str], int]:
+        """Pipeline Markdown por página, liberando recursos en el bucle.
 
-        Cada ``textpage`` se libera dentro del bucle: el pico de memoria
-        nativa es de UNA página a la vez. El conversor a Markdown
-        (ISSUE-006) consumira este generador página a página sin duplicar
-        el PDF completo en memoria.
+        El pico de memoria nativa es de UNA página a la vez: cada
+        textpage se cierra antes de pasar a la siguiente.
         """
+        page_markdowns = []
+        pages_processed = 0
         for page in document:
             text_page = page.get_textpage()
             try:
-                yield text_page.get_text_bounded(
-                    left=_UNBOUNDED_LEFT,
-                    bottom=_UNBOUNDED_LEFT,
-                    right=_UNBOUNDED,
-                    top=_UNBOUNDED,
-                )
+                blocks = segment_page(text_page)
+                page_markdown = build_page_markdown(classify_blocks(blocks))
             finally:
                 text_page.close()
                 page.close()
-
-    def _collect_page_texts(
-        self, document: pdfium.PdfDocument
-    ) -> tuple[str, int]:
-        pages_processed = 0
-        fragments = []
-        for text in self._iter_page_texts(document):
-            if text.strip():
+            if page_markdown.strip():
                 pages_processed += 1
-            fragments.append(text)
-        return "".join(fragments), pages_processed
+            page_markdowns.append(page_markdown)
+        return page_markdowns, pages_processed
 
     def _ensure_text_found(self, markdown: str, filename: str) -> None:
         if not markdown.strip():

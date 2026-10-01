@@ -51,6 +51,29 @@ def blank_pdf() -> bytes:
     return _render(writer)
 
 
+def pdf_with_layout(*lines: tuple[str, float, float]) -> bytes:
+    """PDF de una página con líneas (texto, tamaño de fuente, y_offset).
+
+    Para tests del pipeline de Markdown: permite encabezados con
+    fuente grande, párrafos y ítems de lista en la misma página.
+    """
+    parts = [
+        f"BT /F1 {size} Tf 10 {y} Td ({text}) Tj ET"
+        for text, size, y in lines
+    ]
+    stream = "\n".join(parts).encode()
+    objects = {
+        1: b"<< /Type /Catalog /Pages 2 0 R >>",
+        2: b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        3: b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 72 72] "
+        b"/Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+        4: b"<< /Length " + str(len(stream)).encode() + b" >>\nstream\n"
+        + stream + b"\nendstream",
+        5: b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    }
+    return _serialize(objects)
+
+
 def encrypted_pdf(user_password: str = "", owner_password: str = "owner") -> bytes:
     """PDF en blanco con cifrado; contraseña de usuario configurable."""
     writer = PdfWriter()
