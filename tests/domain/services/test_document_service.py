@@ -1,8 +1,8 @@
-"""Tests de dominio puro para DocumentService.
+"""Tests de dominio puro para DocumentService (contrato de delegación).
 
 El extractor se simula con ``unittest.mock`` anclado al contrato
-``PdfToMarkdown`` (``spec=``): sin PDFs reales, sin base64, sin pdfium.
-Aquí solo se verifica el contrato de delegación del dominio.
+``PdfToMarkdown`` (``spec=``); el pool con el doble inmediato de
+``tests.doubles``. Sin PDFs reales, sin pdfium, sin HTTP.
 """
 
 from unittest.mock import Mock
@@ -12,7 +12,7 @@ import pytest
 from core.exceptions import CorruptFileError, EmptyExtractionError
 from domain.models.extraction_result import ExtractionResult
 from domain.ports.text_extractor import PdfToMarkdown
-from domain.services.document_service import DocumentService
+from tests.doubles import make_document_service
 
 RESULT = ExtractionResult(
     markdown="texto extraído",
@@ -31,7 +31,7 @@ def extractor() -> Mock:
 class TestHappyPath:
     def test_returns_enriched_result_from_extractor(self, extractor):
         extractor.extract.return_value = RESULT
-        service = DocumentService(extractor)
+        service = make_document_service(extractor)
 
         result = service.extract(content=b"%PDF-1.4 ...", filename="doc.pdf")
 
@@ -39,7 +39,7 @@ class TestHappyPath:
 
     def test_delegates_exact_content_and_filename(self, extractor):
         extractor.extract.return_value = RESULT
-        service = DocumentService(extractor)
+        service = make_document_service(extractor)
         content = b"%PDF-1.4 bytes crudos"
         filename = "reporte.pdf"
 
@@ -62,7 +62,7 @@ class TestErrorPropagation:
     ):
         domain_error = error_class("fallo")
         extractor.extract.side_effect = domain_error
-        service = DocumentService(extractor)
+        service = make_document_service(extractor)
 
         with pytest.raises(error_class) as exc_info:
             service.extract(b"contenido", "doc.pdf")
@@ -72,10 +72,9 @@ class TestErrorPropagation:
 
 class TestTrustsInput:
     def test_does_not_validate_content_or_filename(self, extractor):
-        """El servicio no valida formato ni tamaño: esa lógica es del
-        orquestador en la frontera. Cualquier entrada se delega tal cual."""
+        """Solo valida tamaño; formato y contenido se delegan al extractor."""
         extractor.extract.return_value = RESULT
-        service = DocumentService(extractor)
+        service = make_document_service(extractor)
 
         service.extract(content=b"", filename="")
 

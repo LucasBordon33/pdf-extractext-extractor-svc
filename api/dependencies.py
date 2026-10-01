@@ -1,14 +1,15 @@
-﻿"""Contenedor manual de dependencias (DI).
+﻿"""Raíz de composición (composition root).
 
-``main.py`` registra aqui las instancias concretas (composition
-root); los tests sobreescriben con ``app.dependency_overrides``.
-Si nadie registro el servicio, se usa el wiring por defecto para
-que la app siga siendo funcional de forma aislada.
+Único punto del sistema donde se cablean adaptadores concretos con el
+dominio: extractor (pdfium), pool de concurrencia (threads + semáforo)
+y límites operativos desde la configuración del entorno.
 """
 
 from functools import lru_cache
 
+from adapters.concurrency.thread_pool import ThreadPoolExtractionPool
 from adapters.extractors.pdf_extractor import PdfTextExtractor
+from core.config import get_settings
 from domain.services.document_service import DocumentService
 
 _registry: dict[type, object] = {}
@@ -19,10 +20,25 @@ def register(service_type: type, instance: object) -> None:
     _registry[service_type] = instance
 
 
+def _build_service() -> DocumentService:
+    """Wiring por defecto con los knobs del entorno."""
+    settings = get_settings()
+    pool = ThreadPoolExtractionPool(
+        max_workers=settings.extraction_pool_size,
+        max_concurrent=settings.max_concurrent_extractions,
+    )
+    return DocumentService(
+        PdfTextExtractor(),
+        pool,
+        max_upload_size_mb=settings.max_upload_size_mb,
+        extract_timeout_seconds=settings.extract_timeout_seconds,
+    )
+
+
 @lru_cache
 def _default_document_service() -> DocumentService:
     """Wiring por defecto (defensivo) cuando no hay registro manual."""
-    return DocumentService(PdfTextExtractor())
+    return _build_service()
 
 
 def get_document_service() -> DocumentService:

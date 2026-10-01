@@ -16,6 +16,7 @@ from core.exceptions import (
 )
 from domain.models.extraction_result import ExtractionResult
 from domain.ports.text_extractor import PdfToMarkdown
+from tests.doubles import make_document_service
 
 
 class StubExtractor(PdfToMarkdown):
@@ -45,9 +46,7 @@ def make_client(extractor: PdfToMarkdown) -> TestClient:
 
 
 def _service_from(extractor: PdfToMarkdown):
-    from domain.services.document_service import DocumentService
-
-    return DocumentService(extractor)
+    return make_document_service(extractor)
 
 
 def valid_body() -> dict:

@@ -1,4 +1,4 @@
-"""Tests del punto de entrada: wiring DI, handlers globales y docs."""
+﻿"""Tests del punto de entrada: wiring DI, handlers globales y docs."""
 
 import base64
 
@@ -12,6 +12,7 @@ from core.exceptions import CorruptFileError
 from domain.models.extraction_result import ExtractionResult
 from domain.ports.text_extractor import PdfToMarkdown
 from domain.services.document_service import DocumentService
+from tests.doubles import make_document_service
 
 
 class ExplodingExtractor(PdfToMarkdown):
@@ -35,7 +36,7 @@ def fail_with():
 
     def _install(error: Exception):
         main.app.dependency_overrides[get_document_service] = lambda: (
-            DocumentService(ExplodingExtractor(error))
+            make_document_service(ExplodingExtractor(error))
         )
 
     yield _install
