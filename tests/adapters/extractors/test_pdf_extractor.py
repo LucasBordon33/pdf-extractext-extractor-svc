@@ -1,4 +1,4 @@
-"""Tests de integración controlada del adaptador PdfiumPdfToMarkdown.
+"""Tests de integración controlada del adaptador PdfTextExtractor.
 
 "Controlada": PDFs generados en memoria por ``tests/fixtures/pdf_factory``
 (sin I/O de disco), procesados por el extractor REAL (pdfium). El dominio
@@ -7,7 +7,7 @@ no participa: aquí se valida el adaptador contra el contrato del puerto.
 
 import pytest
 
-from adapters.extractors.pdf_extractor import PdfiumPdfToMarkdown
+from adapters.extractors.pdf_extractor import PdfTextExtractor
 from core.exceptions import CorruptFileError, EmptyExtractionError
 from domain.models.extraction_result import ExtractionResult
 from domain.ports.text_extractor import PdfToMarkdown
@@ -20,7 +20,7 @@ from tests.fixtures.pdf_factory import (
 
 @pytest.fixture
 def extractor() -> PdfToMarkdown:
-    return PdfiumPdfToMarkdown()
+    return PdfTextExtractor()
 
 
 class TestContract:
