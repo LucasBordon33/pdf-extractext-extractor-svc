@@ -61,7 +61,32 @@ def pdf_with_layout(*lines: tuple[str, float, float]) -> bytes:
         f"BT /F1 {size} Tf 10 {y} Td ({text}) Tj ET"
         for text, size, y in lines
     ]
-    stream = "\n".join(parts).encode()
+    return _serialize_with_content("\n".join(parts).encode())
+
+
+def pdf_of_size_mb(size_mb: int) -> bytes:
+    """PDF válido de ~``size_mb`` MB con texto extraíble.
+
+    Rellena el content stream con miles de operadores ``Tj`` idénticos:
+    pypdfium2 los extrae sin error (un string gigante único devuelve la
+    página de texto vacía). Suple al dataset oficial (ISSUE-017) en el
+    test no-disk de ISSUE-013.
+    """
+    line = b"BT /F1 12 Tf 10 40 Td (AAAAAAAAAA) Tj ET\n"
+    stream = line * (size_mb * 1024 * 1024 // len(line))
+    return _serialize_with_content(stream)
+
+
+def encrypted_pdf(user_password: str = "", owner_password: str = "owner") -> bytes:
+    """PDF en blanco con cifrado; contraseña de usuario configurable."""
+    writer = PdfWriter()
+    writer.add_blank_page(width=72, height=72)
+    writer.encrypt(user_password=user_password, owner_password=owner_password)
+    return _render(writer)
+
+
+def _serialize_with_content(stream: bytes) -> bytes:
+    """PDF de una página cuyo content stream es el dado (en memoria)."""
     objects = {
         1: b"<< /Type /Catalog /Pages 2 0 R >>",
         2: b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
@@ -72,14 +97,6 @@ def pdf_with_layout(*lines: tuple[str, float, float]) -> bytes:
         5: b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
     }
     return _serialize(objects)
-
-
-def encrypted_pdf(user_password: str = "", owner_password: str = "owner") -> bytes:
-    """PDF en blanco con cifrado; contraseña de usuario configurable."""
-    writer = PdfWriter()
-    writer.add_blank_page(width=72, height=72)
-    writer.encrypt(user_password=user_password, owner_password=owner_password)
-    return _render(writer)
 
 
 def _render(writer: PdfWriter) -> bytes:

@@ -22,7 +22,6 @@ dependencies = [
 dev = [
     "pytest",
     "httpx",          # TestClient
-    "pytest-asyncio>=1.4.0",  # tests de backpressure
     "ruff",
     # PyPDF2 ya no es runtime: queda solo como generador de PDFs
     # de prueba (pypdfium2 no escribe PDFs; ver tests/fixtures/)
@@ -60,4 +59,3 @@ extend-immutable-calls = ["fastapi.Depends"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-asyncio_mode = "auto"

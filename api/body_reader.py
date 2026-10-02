@@ -5,10 +5,19 @@ La pauta R11 pide no duplicar buffers y no tocar disco. En lugar de
 de ``python-multipart`` que spool a disco al superar 1 MB, este módulo:
 
 - ``read_body`` acumula el binario crudo en un único ``io.BytesIO``
-  leyendo a chunks de 64 KB desde ``request.stream()``.
+  leyendo a chunks desde ``request.stream()``.
 - ``read_multipart`` parsea el multipart con el parser feedable de
   ``python-multipart`` sobre el mismo stream: el campo ``file`` se
   acumula en memoria y el resto de partes se descarta sin materializar.
+
+Estas son las únicas funciones ``async`` del proyecto: el protocolo
+ASGI entrega el body por ``receive`` (await) y no existe forma síncrona
+de leerlo sin bloquear el loop o duplicar el buffer completo. El resto
+de la capa web, el dominio y el pool son síncronos (ADR-TP-5). Para que
+las decisiones de umbral se puedan testear sin asyncio, están extraídas
+como helpers puros síncronos (``_ensure_declared_within``,
+``_ensure_room``, ``_ensure_not_empty``); el loop ``async`` que queda es
+solo pegamento delgado sobre el stream.
 
 Tope duro durante la lectura (no solo por ``Content-Length``): un
 cliente que mienta la longitud o use chunked encoding no puede tumba la
@@ -23,7 +32,6 @@ from python_multipart.multipart import MultipartParser, parse_options_header
 
 from core.exceptions import EmptyBodyError, FileTooLargeError, MissingFileFieldError
 
-CHUNK_SIZE = 64 * 1024
 _BYTES_PER_MB = 1024 * 1024
 _MAX_FILENAME_CHARS = 128
 _FILE_FIELD_NAME = b"file"
@@ -47,21 +55,18 @@ async def read_body(request, max_bytes: int) -> bytes:
     """Lee el body crudo en chunks con corte duro en ``max_bytes``.
 
     Primero responde 413 con el ``Content-Length`` sin tocar el body;
-    luego aborta en cuanto la suma de chunks supera el tope.
+    luego aborta en cuanto la suma de chunks supera el tope. El único
+    comportamiento es la frontera ASGI; las decisiones son síncronas.
     """
-    declared = _declared_length(request)
-    if declared is not None and declared > max_bytes:
-        _raise_too_large(max_bytes)
+    _ensure_declared_within(_declared_length(request), max_bytes)
 
     buffer = io.BytesIO()
     async for chunk in request.stream():
-        if buffer.tell() + len(chunk) > max_bytes:
-            _raise_too_large(max_bytes)
+        _ensure_room(buffer.tell(), len(chunk), max_bytes)
         buffer.write(chunk)
 
     content = buffer.getvalue()
-    if not content:
-        raise EmptyBodyError("el body de la peticion esta vacio")
+    _ensure_not_empty(content)
     return content
 
 
@@ -77,16 +82,7 @@ async def read_multipart(request, max_bytes: int) -> tuple[bytes, str]:
     if not boundary:
         raise EmptyBodyError("multipart invalido: falta el boundary")
 
-    collector = _FileCollector(max_bytes)
-    callbacks = {
-        "on_part_begin": collector.on_part_begin,
-        "on_header_field": collector.on_header_field,
-        "on_header_value": collector.on_header_value,
-        "on_header_end": collector.on_header_end,
-        "on_headers_finished": collector.on_headers_finished,
-        "on_part_data": collector.on_part_data,
-    }
-    parser = MultipartParser(boundary, callbacks)
+    parser, collector = _build_multipart_parser(max_bytes, boundary)
     async for chunk in request.stream():
         parser.write(chunk)
     parser.finalize()
@@ -99,6 +95,43 @@ def _declared_length(request) -> int | None:
     if header is None or not header.isdigit():
         return None
     return int(header)
+
+
+def _ensure_declared_within(declared: int | None, max_bytes: int) -> None:
+    """Rechaza 413 por el header antes de leer, sin bloquear nada."""
+    if declared is not None and declared > max_bytes:
+        _raise_too_large(max_bytes)
+
+
+def _ensure_room(current: int, incoming: int, max_bytes: int) -> None:
+    """Aborta en cuanto el acumulado más el chunk entrante excede el tope."""
+    if current + incoming > max_bytes:
+        _raise_too_large(max_bytes)
+
+
+def _ensure_not_empty(content: bytes) -> None:
+    if not content:
+        raise EmptyBodyError("el body de la peticion esta vacio")
+
+
+def _build_multipart_parser(
+    max_bytes: int, boundary: bytes
+) -> tuple[MultipartParser, "_FileCollector"]:
+    """Parser feedable + colector del campo ``file``.
+
+    Fabricado así para que el parseo (síncrono) sea testeable sin
+    pasar por el loop async del socket.
+    """
+    collector = _FileCollector(max_bytes)
+    callbacks = {
+        "on_part_begin": collector.on_part_begin,
+        "on_header_field": collector.on_header_field,
+        "on_header_value": collector.on_header_value,
+        "on_header_end": collector.on_header_end,
+        "on_headers_finished": collector.on_headers_finished,
+        "on_part_data": collector.on_part_data,
+    }
+    return MultipartParser(boundary, callbacks), collector
 
 
 def _raise_too_large(max_bytes: int) -> None:

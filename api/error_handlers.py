@@ -54,13 +54,13 @@ def _error_response(
     return JSONResponse(status_code=status_code, content=body)
 
 
-async def _validation_error_handler(
+def _validation_error_handler(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
     return _error_response(422, "VALIDATION_ERROR", _first_validation_message(exc))
 
 
-async def _domain_error_handler(
+def _domain_error_handler(
     request: Request, exc: DocumentExtractionError
 ) -> JSONResponse:
     response = _error_response(exc.status_http, exc.error_code, str(exc))
@@ -73,13 +73,13 @@ async def _domain_error_handler(
 def _builtin_error_handler(status_code: int, error_code: str):
     """Fabrica de handlers para excepciones built-in mapeadas."""
 
-    async def handler(request: Request, exc: Exception) -> JSONResponse:
+    def handler(request: Request, exc: Exception) -> JSONResponse:
         return _error_response(status_code, error_code, str(exc))
 
     return handler
 
 
-async def _unexpected_error_handler(
+def _unexpected_error_handler(
     request: Request, exc: Exception
 ) -> JSONResponse:
     # Nunca filtrar detalles internos (stack, datos) al cliente.

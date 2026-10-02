@@ -115,6 +115,31 @@ class TestBoundary:
         assert response.status_code == 413
         assert_error(response, "FILE_TOO_LARGE")
 
+    def test_oversized_chunked_body_without_content_length_returns_413(
+        self, client
+    ):
+        """Chunked sin ``Content-Length``: el tope se corta durante la
+        lectura, no por el header (criterio ISSUE-013)."""
+
+        def chunked_oversized_body():
+            for _ in range(13):
+                yield b"x" * (1024 * 1024)  # 13 MB > tope de 12 MB
+
+        response = client.post(API_URL, content=chunked_oversized_body())
+
+        assert response.status_code == 413
+        assert_error(response, "FILE_TOO_LARGE")
+
+    def test_chunked_body_without_content_length_is_accepted(self, client):
+        """Un PDF válido chunked viaja y se procesa igual que con header."""
+        pdf = pdf_with_text("chunked")
+
+        parts = (part for part in (pdf[:10], pdf[10:]))
+        response = client.post(API_URL, content=parts)
+
+        assert response.status_code == 200
+        assert "chunked" in response.json()["content"]
+
     def test_oversized_multipart_file_returns_413(self, client):
         oversized = b"%PDF-" + (b"x" * (12 * 1024 * 1024 + 100))
 
