@@ -20,7 +20,6 @@ El extractor es lento a propósito: la ráfaga de peticiones es la que
 llena los topes, no la CPU.
 """
 
-import base64
 import threading
 import time
 
@@ -35,7 +34,8 @@ from domain.ports.text_extractor import PdfToMarkdown
 from domain.services.document_service import DocumentService
 from tests.fixtures.pdf_factory import pdf_with_text
 
-API_URL = "/api/v1/extract"
+API_URL = "/extract"
+PDF_CONTENT_TYPE = "application/pdf"
 SATURATED_STATUS = 503
 SATURATED_CODE = "QUEUE_SATURATED"
 OVERLOADED_STATUS = 429
@@ -62,11 +62,9 @@ class SlowExtractor(PdfToMarkdown):
         )
 
 
-def extract_body(content: bytes, filename: str = "doc.pdf") -> dict:
-    return {
-        "filename": filename,
-        "content_base64": base64.b64encode(content).decode(),
-    }
+def raw_payload(content: bytes) -> dict:
+    """Kwargs de POST para enviar el PDF como binario crudo (R2)."""
+    return {"content": content, "headers": {"content-type": PDF_CONTENT_TYPE}}
 
 
 def build_app(
@@ -103,7 +101,7 @@ def burst(app, payload: dict, requests: int) -> list:
     def call() -> None:
         start.wait(timeout=5)
         with TestClient(app) as client:
-            response = client.post(API_URL, json=payload)
+            response = client.post(API_URL, **payload)
         with guard:
             responses.append(response)
 
@@ -125,7 +123,7 @@ def codes(responses: list, status: int) -> list[dict]:
 
 
 def payload_for(text: str = "hola") -> dict:
-    return extract_body(pdf_with_text(text))
+    return raw_payload(pdf_with_text(text))
 
 
 @pytest.fixture
@@ -186,7 +184,7 @@ class TestQueueSaturationIsVisibleToTheClient:
         burst(saturated_app, payload_for(), 4)
 
         with TestClient(saturated_app) as client:
-            recovered = client.post(API_URL, json=payload_for())
+            recovered = client.post(API_URL, **payload_for())
 
         assert recovered.status_code == 200
         assert "Retry-After" not in recovered.headers
@@ -240,6 +238,6 @@ class TestAdmissionIsVisibleToTheClient:
         burst(overloaded_app, payload_for(), 4)
 
         with TestClient(overloaded_app) as client:
-            recovered = client.post(API_URL, json=payload_for())
+            recovered = client.post(API_URL, **payload_for())
 
         assert recovered.status_code == 200

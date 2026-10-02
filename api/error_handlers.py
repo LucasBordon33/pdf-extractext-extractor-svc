@@ -18,7 +18,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from api.v1.schemas import ErrorResponse
+from api.extract.schemas import ErrorResponse
 from core.exceptions import DocumentExtractionError
 
 _INTERNAL_ERROR_MESSAGE = "ocurrio un error interno inesperado"
@@ -46,10 +46,12 @@ def register_exception_handlers(app: FastAPI) -> None:
 def _error_response(
     status_code: int, error_code: str, message: str
 ) -> JSONResponse:
-    return JSONResponse(
-        status_code=status_code,
-        content=ErrorResponse(error_code=error_code, message=message).model_dump(),
+    # exclude_none: "retry_after_seconds" solo aparece cuando corresponde
+    # (429/503); en el resto la forma wire queda {error_code, message}.
+    body = ErrorResponse(error_code=error_code, message=message).model_dump(
+        exclude_none=True
     )
+    return JSONResponse(status_code=status_code, content=body)
 
 
 async def _validation_error_handler(

@@ -54,6 +54,28 @@ class NotAPdfError(DocumentExtractionError):
     status_http: int = HTTPStatus.UNSUPPORTED_MEDIA_TYPE
 
 
+class EmptyBodyError(DocumentExtractionError):
+    """La petición no trae ningún byte utilizable.
+
+    Body crudo vacío o multipart cuyo campo ``file`` no aporta nada:
+    no tiene sentido cargar el motor de extracción.
+    """
+
+    error_code: str = "EMPTY_BODY"
+    status_http: int = HTTPStatus.BAD_REQUEST
+
+
+class MissingFileFieldError(DocumentExtractionError):
+    """El multipart no incluye el campo ``file`` esperado.
+
+    422: la forma de la petición es válida pero le falta el dato
+    obligatorio (ISSUE-012 exige el campo en la convención del grupo).
+    """
+
+    error_code: str = "MISSING_FILE"
+    status_http: int = HTTPStatus.UNPROCESSABLE_ENTITY
+
+
 class EmptyExtractionError(DocumentExtractionError):
     """La extracción terminó sin producir contenido."""
 

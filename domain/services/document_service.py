@@ -83,6 +83,17 @@ class DocumentService:
             # degrada el servicio de forma irreversible.
             self._admission.release()
 
+    def can_accept_work(self) -> bool:
+        """True si hay un lugar de admisión libre (readiness).
+
+        No consume el lugar: lo toma y lo devuelve al instante, solo
+        para que ``GET /ready`` distinga saturación de indisponibilidad.
+        """
+        if self._admission.acquire(blocking=False):
+            self._admission.release()
+            return True
+        return False
+
     def _admit(self, filename: str) -> None:
         """Toma un lugar de extracción, esperando como máximo el timeout.
 

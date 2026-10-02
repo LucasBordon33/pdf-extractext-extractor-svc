@@ -1,7 +1,5 @@
 ﻿"""Tests del punto de entrada: wiring DI, handlers globales y docs."""
 
-import base64
-
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -13,6 +11,8 @@ from domain.models.extraction_result import ExtractionResult
 from domain.ports.text_extractor import PdfToMarkdown
 from domain.services.document_service import DocumentService
 from tests.doubles import make_document_service
+
+API_URL = "/extract"
 
 
 class ExplodingExtractor(PdfToMarkdown):
@@ -43,11 +43,12 @@ def fail_with():
     main.app.dependency_overrides.pop(get_document_service, None)
 
 
-def request_body(pdf_factory, text: str = "Hola desde main") -> dict:
-    return {
-        "filename": "reporte.pdf",
-        "content_base64": base64.b64encode(pdf_factory(text)).decode(),
-    }
+def post_pdf(client, pdf_factory):
+    return client.post(
+        API_URL,
+        content=pdf_factory("Hola desde main"),
+        headers={"content-type": "application/pdf"},
+    )
 
 
 class TestAppInitialization:
@@ -70,17 +71,26 @@ class TestManualDIWiring:
 
     def test_endpoint_resolves_registered_service(self, client, pdf_factory):
         """Integración: main → router → DocumentService → pdfium."""
-        response = client.post("/api/v1/extract", json=request_body(pdf_factory))
+        response = post_pdf(client, pdf_factory)
         assert response.status_code == 200
         payload = response.json()
-        assert "Hola desde main" in payload["markdown"]
+        assert "Hola desde main" in payload["content"]
         assert payload["page_count"] == 1
 
 
 class TestRouterRegistration:
-    def test_extract_route_is_mounted_at_api_v1(self, client):
+    def test_extract_route_is_mounted_at_the_root(self, client):
         paths = client.get("/openapi.json").json()["paths"]
+        assert "/extract" in paths
         assert "/api/v1/extract" in paths
+
+    def test_canonical_extract_route_is_not_deprecated(self, client):
+        operation = client.get("/openapi.json").json()["paths"]["/extract"]["post"]
+        assert "deprecated" not in operation
+
+    def test_legacy_alias_extract_route_is_deprecated(self, client):
+        operation = client.get("/openapi.json").json()["paths"]["/api/v1/extract"]["post"]
+        assert operation["deprecated"] is True
 
 
 class TestUvicornRuntimeLimits:
@@ -138,19 +148,19 @@ class TestUvicornRuntimeLimits:
 class TestGlobalExceptionHandlers:
     def test_value_error_returns_422(self, client, fail_with, pdf_factory):
         fail_with(ValueError("valor invalido"))
-        response = client.post("/api/v1/extract", json=request_body(pdf_factory))
+        response = post_pdf(client, pdf_factory)
         assert response.status_code == 422
         assert response.json()["error_code"] == "VALUE_ERROR"
 
     def test_runtime_error_returns_400(self, client, fail_with, pdf_factory):
         fail_with(RuntimeError("fallo en runtime"))
-        response = client.post("/api/v1/extract", json=request_body(pdf_factory))
+        response = post_pdf(client, pdf_factory)
         assert response.status_code == 400
         assert response.json()["error_code"] == "RUNTIME_ERROR"
 
     def test_memory_error_returns_413(self, client, fail_with, pdf_factory):
         fail_with(MemoryError("sin memoria"))
-        response = client.post("/api/v1/extract", json=request_body(pdf_factory))
+        response = post_pdf(client, pdf_factory)
         assert response.status_code == 413
         assert response.json()["error_code"] == "MEMORY_ERROR"
 
@@ -158,7 +168,7 @@ class TestGlobalExceptionHandlers:
         self, client, fail_with, pdf_factory
     ):
         fail_with(ZeroDivisionError("secreto interno"))
-        response = client.post("/api/v1/extract", json=request_body(pdf_factory))
+        response = post_pdf(client, pdf_factory)
         assert response.status_code == 500
         body = response.json()
         assert body["error_code"] == "INTERNAL_ERROR"
@@ -168,7 +178,7 @@ class TestGlobalExceptionHandlers:
         self, client, fail_with, pdf_factory
     ):
         fail_with(CorruptFileError("pdf roto"))
-        response = client.post("/api/v1/extract", json=request_body(pdf_factory))
+        response = post_pdf(client, pdf_factory)
         assert response.status_code == 400
         assert response.json()["error_code"] == "CORRUPT_FILE"
 
@@ -179,6 +189,6 @@ class TestDocumentation:
 
     def test_openapi_reflects_schemas_with_examples(self, client):
         schemas = client.get("/openapi.json").json()["components"]["schemas"]
-        for name in ("ExtractRequest", "ExtractResponse", "ErrorResponse"):
+        for name in ("ExtractResponse", "ErrorResponse"):
             assert name in schemas
-        assert "example" in schemas["ExtractRequest"]
+        assert "example" in schemas["ExtractResponse"]

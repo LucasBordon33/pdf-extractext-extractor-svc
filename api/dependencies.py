@@ -20,8 +20,12 @@ def register(service_type: type, instance: object) -> None:
     _registry[service_type] = instance
 
 
-def _build_service() -> DocumentService:
-    """Wiring por defecto con los knobs del entorno."""
+def build_document_service() -> DocumentService:
+    """Wiring con los knobs del entorno (unica definicion del grafo).
+
+    ``main.py`` y el composition root usan esta funcion; no hay dos
+    definiciones del grafo que puedan divergir.
+    """
     settings = get_settings()
     pool = ThreadPoolExtractionPool(
         max_workers=settings.extraction_pool_size,
@@ -41,7 +45,7 @@ def _build_service() -> DocumentService:
 @lru_cache
 def _default_document_service() -> DocumentService:
     """Wiring por defecto (defensivo) cuando no hay registro manual."""
-    return _build_service()
+    return build_document_service()
 
 
 def get_document_service() -> DocumentService:
