@@ -13,11 +13,19 @@ import uvicorn
 from api.app import create_app
 from api.dependencies import build_document_service, register
 from core.config import get_settings
+from core.logging import configure_logging
 from domain.services.document_service import DocumentService
 
 
 def create_application():
-    """Ensambla la app y registra las dependencias concretas."""
+    """Ensambla la app y registra las dependencias concretas.
+
+    ``configure_logging`` es idempotente y va antes de ``create_app``:
+    el middleware del ISSUE-014 ya emite una línea JSON por request.
+    """
+    configure_logging(
+        level=get_settings().log_level, fmt=get_settings().log_format
+    )
     app = create_app()
     register(DocumentService, build_document_service())
     return app
@@ -31,9 +39,9 @@ def run() -> None:
     Uvicorn responde 503 en texto plano, sin ``Retry-After``, y cierra
     la conexión, así que ese cuerpo NO es un ``ErrorResponse``.
 
-    El access log se deja activo a propósito: hoy es la única línea por
-    request que emite el servicio. Desactivarlo antes del middleware de
-    ISSUE-014 dejaría el runtime sin observabilidad.
+    El access log de Uvicorn se deja activo a propósito: complementa la
+    línea JSON que ya emite el middleware del ISSUE-014 con la info de
+    red (addr/proto) que esa línea no lleva.
     """
     settings = get_settings()
     uvicorn.run(

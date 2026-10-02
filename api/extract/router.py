@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 from api.body_reader import read_body, read_multipart, sanitize_filename
 from api.dependencies import get_document_service
 from api.extract.schemas import ErrorResponse, ExtractResponse
+from api.metrics import METRICS
 from core.config import get_settings
 from core.exceptions import NotAPdfError
 from domain.services.document_service import DocumentService
@@ -118,6 +119,18 @@ def ready(
     )
 
 
+@router.get(
+    "/metrics",
+    response_class=Response,
+    tags=["observability"],
+    summary="Métricas de texto Prometheus (ISSUE-014)",
+    response_description="200 con contadores, gauges e histogramas",
+)
+def metrics() -> Response:
+    """Expone las siete familias sin dependencia de `prometheus_client`."""
+    return Response(content=METRICS.render(), media_type="text/plain; version=0.0.4")
+
+
 @router.post(
     "/extract",
     response_model=ExtractResponse,
@@ -134,11 +147,19 @@ def extract_document(
     """Handler deliberadamente delgado: HTTP, headers, DI.
 
     La entrada ya viene validada (tamaño, multipart, magic number) y
-    sin tocar disco; aquí solo se delega en el dominio.
+    sin tocar disco; aquí solo se delega en el dominio y se alimentan
+    las métricas (bytes, páginas, extracciones en vuelo).
     """
-    result = document_service.extract(
-        content=input_data.content, filename=input_data.filename
-    )
-    response.headers["X-Filename"] = input_data.filename
-    response.headers["X-Replica"] = _REPLICA_ID
-    return ExtractResponse(content=result.markdown, page_count=result.page_count)
+    METRICS.record_bytes(len(input_data.content))
+    METRICS.extractions_in_flight.inc()
+    try:
+        result = document_service.extract(
+            content=input_data.content, filename=input_data.filename
+        )
+        METRICS.record_pages(result.page_count)
+        response.headers["X-Filename"] = input_data.filename
+        response.headers["X-Replica"] = _REPLICA_ID
+        return ExtractResponse(content=result.markdown, page_count=result.page_count)
+    finally:
+        # El gauge vuelve a 0 pase lo que pase (éxito o error de dominio).
+        METRICS.extractions_in_flight.dec()

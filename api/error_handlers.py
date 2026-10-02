@@ -19,6 +19,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from api.extract.schemas import ErrorResponse
+from api.metrics import METRICS
 from core.exceptions import DocumentExtractionError
 
 _INTERNAL_ERROR_MESSAGE = "ocurrio un error interno inesperado"
@@ -63,6 +64,9 @@ def _validation_error_handler(
 def _domain_error_handler(
     request: Request, exc: DocumentExtractionError
 ) -> JSONResponse:
+    # Anota 429/503 en la métrica de rechazos (ISSUE-014); los demás
+    # error_code no pertenecen a la familia y se ignoran.
+    METRICS.record_rejection(exc.error_code)
     response = _error_response(exc.status_http, exc.error_code, str(exc))
     # 429/503 le dicen al cliente cuando reintentar; el resto no lleva header.
     if exc.retry_after_seconds is not None:

@@ -9,6 +9,7 @@ from functools import lru_cache
 
 from adapters.concurrency.thread_pool import ThreadPoolExtractionPool
 from adapters.extractors.pdf_extractor import PdfTextExtractor
+from api.metrics import METRICS
 from core.config import get_settings
 from domain.services.document_service import DocumentService
 
@@ -39,6 +40,7 @@ def build_document_service() -> DocumentService:
         extract_timeout_seconds=settings.extract_timeout_seconds,
         max_concurrent_extractions=settings.max_concurrent_extractions,
         admission_timeout_seconds=settings.admission_timeout_seconds,
+        admission_observer=METRICS.record_admission_wait,
     )
 
 

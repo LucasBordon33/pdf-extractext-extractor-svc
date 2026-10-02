@@ -18,6 +18,8 @@ variables de entorno — todos los valores llegan inyectados.
 """
 
 import threading
+import time
+from collections.abc import Callable
 from concurrent.futures import Future
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from math import ceil
@@ -52,6 +54,7 @@ class DocumentService:
         extract_timeout_seconds: float,
         max_concurrent_extractions: int,
         admission_timeout_seconds: float,
+        admission_observer: Callable[[float], None] | None = None,
     ) -> None:
         self._extractor = extractor
         self._pool = pool
@@ -59,6 +62,7 @@ class DocumentService:
         self._timeout_seconds = extract_timeout_seconds
         self._admission_timeout_seconds = admission_timeout_seconds
         self._admission = threading.Semaphore(max_concurrent_extractions)
+        self._admission_observer = admission_observer
 
     def extract(self, content: bytes, filename: str) -> ExtractionResult:
         """Devuelve el resultado enriquecido de la extracción.
@@ -100,9 +104,18 @@ class DocumentService:
         La espera es bloqueante a propósito: el endpoint es síncrono y
         el TP lo exige, así que no hay event loop al que ceder el control.
 
+        El tiempo de espera se le notifica al ``admission_observer``
+        (si hay uno) pase lo que pase: alimenta el histograma
+        ``admission_wait_seconds`` (ISSUE-014). El dominio sigue sin
+        conocer las métricas: solo recibe un callback.
+
         :raises OverloadedError: el lugar no llegó a tiempo.
         """
-        if self._admission.acquire(timeout=self._admission_timeout_seconds):
+        started = time.monotonic()
+        acquired = self._admission.acquire(timeout=self._admission_timeout_seconds)
+        if self._admission_observer is not None:
+            self._admission_observer(time.monotonic() - started)
+        if acquired:
             return
         raise OverloadedError(
             f"no se logro un lugar de extraccion para '{filename}' en"
