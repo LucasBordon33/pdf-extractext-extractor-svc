@@ -1,33 +1,156 @@
+name: pdf-extractor-tp1
+
+# Anchors reutilizables: límites explícitos por réplica (R7)
+x-extractor-resources: &extractor-resources
+  cpus: "1.0"
+  mem_limit: 768m
+  mem_reservation: 512m
+
+x-common-env: &common-env
+  # Default en MAYÚSCULAS: debe respetar el Literal de core/config.py
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
 
 services:
   extractor:
     build:
       context: .
-    image: pdf-extractext-service:0.1.0
+      dockerfile: Dockerfile
+    image: pdf-extractor:latest
+    # NO container_name: es incompatible con deploy.replicas
+    env_file:
+      # required:false => docker compose up --build funciona sin .env (R15)
+      - path: .env
+        required: false
+    environment:
+      <<: *common-env
+      # Timeout de extracción: Traefik SIEMPRE debe cortar más tarde que esto
+      EXTRACT_TIMEOUT_SECONDS: ${EXTRACT_TIMEOUT_SECONDS:-60}
+    deploy:
+      replicas: 5
+    # Límites explícitos de CPU y RAM por réplica
+    cpus: "1.0"
+    mem_limit: 768m
+    mem_reservation: 512m
+    restart: unless-stopped
+    healthcheck:
+      # La imagen es slim (sin curl); el healthcheck usa el python del propio servicio
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health', timeout=4).status == 200 else 1)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      # start_period generoso: cubre el arranque de los workers sin falsos unhealthy
+      start_period: 45s
+    networks:
+      - loadtest
+    labels:
+      - "traefik.enable=true"
+      # Puerto interno real del servicio en cada réplica
+      - "traefik.http.services.extractor.loadbalancer.server.port=8000"
+      - "traefik.http.routers.extractor.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.extractor.entrypoints=web"
+
+  traefik:
+    # OJO: Traefik <= v3.5 pinea la API de Docker a 1.24 y NO negocia
+    # (docker_engine 29+ exige >= 1.40) -> "Failed to retrieve information
+    # of the docker client and server host". Desde v3.5 negocia la API.
+    image: traefik:v3.7
+    container_name: pdf-extractor-traefik
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      # Descubre las réplicas por label en la red interna
+      - "--providers.docker.network=pdf-extractor-tp1_loadtest"
+      - "--entrypoints.web.address=:8080"
+      # Timeouts del proxy MAYORES que EXTRACT_TIMEOUT_SECONDS (60s):
+      # así el loop de eventos de Traefik no corta la request antes que la app
+      - "--entrypoints.web.transport.respondingTimeouts.readTimeout=120s"
+      - "--entrypoints.web.transport.respondingTimeouts.writeTimeout=120s"
+      - "--entrypoints.web.transport.respondingTimeouts.idleTimeout=180s"
+      - "--api.dashboard=false"
+      - "--api.insecure=false"
+      # /ping en el entrypoint web (bypassea los routers): permite healthcheck
+      # sin exponer la API interna de Traefik
+      - "--ping=true"
+      - "--ping.entryPoint=web"
+    ports:
+      # Punto único de entrada para k6/Vegeta (balancea sobre las 5 réplicas)
+      - "8080:8080"
     env_file:
       - path: .env
         required: false
-    expose:
-      - "${PORT:-8000}"
-    read_only: true
-    tmpfs:
-      - /tmp:size=10m
-    security_opt:
-      - no-new-privileges:true
-    mem_limit: ${MEM_LIMIT:-512m}
+    environment:
+      <<: *common-env
+      # Daemon moderno (Docker Engine 29+, API mínima 1.44): NO pinear
+      # DOCKER_API_VERSION con una versión vieja ("client version is too old")
+      # — el cliente de Traefik v3.4 negocia correctamente.
+    # Límites también para el proxy: ningún contenedor corre sin techo
+    cpus: "0.5"
+    mem_limit: 256m
+    mem_reservation: 128m
     restart: unless-stopped
+    healthcheck:
+      # Usa el binario de Traefik contra el endpoint /ping del entrypoint web
+      # (evita dependencias externas como wget/curl)
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    volumes:
+      # Read-only: Traefik solo necesita escuchar el socket para discovery
+      - /var/run/docker.sock:/var/run/docker.sock
     networks:
-      - pdf-extractext-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.extractor.rule=Host(`${EXTRACTOR_HOST:-universidad.localhost}`) && PathPrefix(`/extract`)"
-      - "traefik.http.routers.extractor.entrypoints=websecure"
-      - "traefik.http.routers.extractor.tls=true"
-      - "traefik.http.routers.extractor.priority=100"
-      - "traefik.http.services.extractor.loadbalancer.server.port=${PORT:-8000}"
+      - loadtest
+
+  # -------------------------------------------------------------------------
+  # Perfil opcional `stress`: herramientas de carga, de forma reproducible.
+  # Levantar con: docker compose --profile stress up
+  # Por defecto NO corren en `docker compose up --build`.
+  # -------------------------------------------------------------------------
+  k6:
+    image: grafana/k6:0.54.0
+    profiles: ["stress"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      TARGET_URL: ${TARGET_URL:-http://traefik:8080}
+      VUS: ${K6_VUS:-50}
+      DURATION: ${K6_DURATION:-2m}
+    volumes:
+      - ./scripts:/scripts:ro
+      - ./data:/data:ro
+    working_dir: /scripts
+    command: ["run", "/scripts/load-test.js"]
+    networks:
+      - loadtest
+    depends_on:
+      traefik:
+        condition: service_started
+
+  vegeta:
+    image: peterevans/vegeta:latest
+    profiles: ["stress"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      TARGET_URL: ${TARGET_URL:-http://traefik:8080}
+      RATE: ${VEGETA_RATE:-200}
+      DURATION: ${VEGETA_DURATION:-2m}
+    volumes:
+      - ./scripts:/scripts:ro
+      - ./data:/data:ro
+    # Ejemplo: cat /scripts/targets.txt | vegeta attack -rate=$RATE -duration=$DURATION
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["cat /scripts/targets.txt | vegeta attack -rate=\"$${RATE}/s\" -duration=\"$${DURATION}\" -targets=/dev/stdin | vegeta report"]
+    networks:
+      - loadtest
+    depends_on:
+      traefik:
+        condition: service_started
 
 networks:
-  traefik-net:
-    external: true
-  pdf-extractext-network:
-    external: true
+  # Red propia del TP (sin orquestador, Traefik descubre por label aquí)
+  loadtest:
+    driver: bridge
