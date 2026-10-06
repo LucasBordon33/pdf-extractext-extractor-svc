@@ -14,9 +14,12 @@ Mapeo global:
 - Exception → 500 (mensaje generico, sin filtrar internos)
 """
 
+from typing import cast
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.types import ExceptionHandler
 
 from api.extract.schemas import ErrorResponse
 from api.metrics import METRICS
@@ -33,10 +36,14 @@ _BUILTIN_HANDLERS: dict[type[Exception], tuple[int, str]] = {
 
 def register_exception_handlers(app: FastAPI) -> None:
     """Registra todos los handlers de error en la app."""
+    # cast: el tipo de Starlette exige ``Exception`` genérica; los
+    # handlers tipados por subclase son correctos por contravarianza.
     app.add_exception_handler(
-        RequestValidationError, _validation_error_handler
+        RequestValidationError, cast(ExceptionHandler, _validation_error_handler)
     )
-    app.add_exception_handler(DocumentExtractionError, _domain_error_handler)
+    app.add_exception_handler(
+        DocumentExtractionError, cast(ExceptionHandler, _domain_error_handler)
+    )
     for exc_type, (status_code, error_code) in _BUILTIN_HANDLERS.items():
         app.add_exception_handler(
             exc_type, _builtin_error_handler(status_code, error_code)

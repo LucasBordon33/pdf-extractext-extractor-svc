@@ -27,8 +27,14 @@ réplica. El ``filename`` que devuelve multipart sale sanitizado
 
 import io
 import re
+from typing import TYPE_CHECKING
 
 from python_multipart.multipart import MultipartParser, parse_options_header
+
+if TYPE_CHECKING:
+    # TypedDict interna de python-multipart (solo existe bajo
+    # TYPE_CHECKING en el paquete): da tipo exacto a los callbacks.
+    from python_multipart.multipart import MultipartCallbacks
 
 from core.exceptions import EmptyBodyError, FileTooLargeError, MissingFileFieldError
 
@@ -123,7 +129,7 @@ def _build_multipart_parser(
     pasar por el loop async del socket.
     """
     collector = _FileCollector(max_bytes)
-    callbacks = {
+    callbacks: MultipartCallbacks = {
         "on_part_begin": collector.on_part_begin,
         "on_header_field": collector.on_header_field,
         "on_header_value": collector.on_header_value,

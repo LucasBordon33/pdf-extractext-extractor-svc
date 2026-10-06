@@ -16,8 +16,8 @@ from core.exceptions import (
 )
 from domain.models.extraction_result import ExtractionResult
 from domain.ports.text_extractor import PdfToMarkdown
-from tests.doubles import make_document_service
-from tests.multipart import multipart_without_file_kwargs
+from tests.integration.multipart import multipart_without_file_kwargs
+from tests.unit.doubles import make_document_service
 
 PDF_BYTES = b"%PDF-1.4 contenido"
 

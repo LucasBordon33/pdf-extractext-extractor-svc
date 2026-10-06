@@ -21,8 +21,10 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest",
+    "pytest-cov",     # gate de cobertura >= 90% en core/domain/adapters
     "httpx",          # TestClient
     "ruff",
+    "mypy",
     # PyPDF2 ya no es runtime: queda solo como generador de PDFs
     # de prueba (pypdfium2 no escribe PDFs; ver tests/fixtures/)
     "pypdf2>=3.0.1",
@@ -59,3 +61,30 @@ extend-immutable-calls = ["fastapi.Depends"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.coverage.run]
+# El gate de calidad mide solo el código de negocio: la capa HTTP
+# (api/) y el entrypoint (main.py) se validan por los tests de
+# integración/contrato, no por porcentaje.
+source = ["core", "domain", "adapters"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@overload",
+]
+
+[tool.mypy]
+python_version = "3.11"
+mypy_path = "."
+packages = ["main", "api", "core", "domain", "adapters"]
+# gradual: errores reales sin exigir anotar cada función de una vez.
+check_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+ignore_missing_imports = true

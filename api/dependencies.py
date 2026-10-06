@@ -53,6 +53,6 @@ def _default_document_service() -> DocumentService:
 def get_document_service() -> DocumentService:
     """Proveedor para FastAPI Depends: registro manual o wiring por defecto."""
     registered = _registry.get(DocumentService)
-    if registered is not None:
+    if isinstance(registered, DocumentService):
         return registered
     return _default_document_service()

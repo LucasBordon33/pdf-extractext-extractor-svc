@@ -1,7 +1,11 @@
 # syntax=docker/dockerfile:1
 
 # ============================================================
-# Stage 1: builder — deps + tooling de TDD + gate de tests
+# Stage 1: builder — solo deps de producción (venv reproducible)
+#
+# El gate de calidad (ruff, mypy, pytest --cov) vive en la CI
+# (.github/workflows/ci.yml), NO en el build: ``docker compose up
+# --build`` debe ser reproducible y no fallar por tests.
 # ============================================================
 FROM python:3.12-slim AS builder
 
@@ -14,11 +18,6 @@ WORKDIR /app
 COPY --from=ghcr.io/astral-sh/uv:0.12.17 /uv /uvx /usr/local/bin/
 
 COPY pyproject.toml uv.lock ./
-RUN uv sync --locked --all-extras --no-install-project
-
-COPY . .
-RUN .venv/bin/pytest -q
-
 RUN uv sync --locked --no-install-project
 
 # ============================================================

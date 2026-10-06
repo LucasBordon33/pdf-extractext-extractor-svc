@@ -9,6 +9,7 @@ de dominio hace el resto. Marca las cabeceras de diagnóstico
 
 import os
 from dataclasses import dataclass
+from typing import Any
 
 from fastapi import APIRouter, Depends, Request, Response, status
 from fastapi.responses import JSONResponse
@@ -28,7 +29,7 @@ _PDF_MAGIC = b"%PDF-"
 _DEFAULT_FILENAME = "documento.pdf"
 _REPLICA_ID = os.environ.get("HOSTNAME") or "unknown"
 
-EXTRACT_RESPONSES: dict[int, dict] = {
+EXTRACT_RESPONSES: dict[int | str, dict[str, Any]] = {
     status.HTTP_400_BAD_REQUEST: {
         "model": ErrorResponse,
         "description": "Body vacío o PDF corrupto/cifrado",

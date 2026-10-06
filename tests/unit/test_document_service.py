@@ -12,7 +12,7 @@ import pytest
 from core.exceptions import CorruptFileError, EmptyExtractionError
 from domain.models.extraction_result import ExtractionResult
 from domain.ports.text_extractor import PdfToMarkdown
-from tests.doubles import make_document_service
+from tests.unit.doubles import make_document_service
 
 RESULT = ExtractionResult(
     markdown="texto extraído",

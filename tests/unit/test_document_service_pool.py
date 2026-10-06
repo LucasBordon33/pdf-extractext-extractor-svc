@@ -24,7 +24,7 @@ from core.exceptions import (
 from domain.models.extraction_result import ExtractionResult
 from domain.ports.extraction_pool import ExtractionPool
 from domain.ports.text_extractor import PdfToMarkdown
-from tests.doubles import ImmediateExtractionPool, make_document_service
+from tests.unit.doubles import ImmediateExtractionPool, make_document_service
 
 RESULT = ExtractionResult(
     markdown="texto", page_count=1, pages_processed=1, duration_ms=1.0

@@ -170,7 +170,7 @@ class Metrics:
 
     def reset(self) -> None:
         """Devuelve todos los contadores a su estado inicial."""
-        self.__init__()
+        type(self).__init__(self)
 
     def render(self) -> str:
         """Todo el texto Prometheus para ``GET /metrics``."""

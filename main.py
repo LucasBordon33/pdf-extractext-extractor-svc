@@ -51,7 +51,7 @@ def run() -> None:
         workers=settings.uvicorn_workers,
         log_level=settings.log_level.lower(),
         limit_concurrency=settings.http_limit_concurrency,
-        timeout_keep_alive=settings.http_timeout_keep_alive,
+        timeout_keep_alive=int(settings.http_timeout_keep_alive),
         access_log=settings.http_access_log,
     )
 

@@ -10,7 +10,7 @@ from core.exceptions import CorruptFileError
 from domain.models.extraction_result import ExtractionResult
 from domain.ports.text_extractor import PdfToMarkdown
 from domain.services.document_service import DocumentService
-from tests.doubles import make_document_service
+from tests.unit.doubles import make_document_service
 
 API_URL = "/extract"
 

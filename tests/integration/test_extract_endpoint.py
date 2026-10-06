@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 import main
 from tests.fixtures.pdf_factory import blank_pdf, pdf_with_text
-from tests.multipart import multipart_without_file_kwargs
+from tests.integration.multipart import multipart_without_file_kwargs
 
 API_URL = "/extract"
 PDF_CONTENT_TYPE = "application/pdf"
