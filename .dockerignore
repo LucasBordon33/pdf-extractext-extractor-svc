@@ -9,15 +9,23 @@
 
 # Artefactos de Python
 __pycache__/
+**/__pycache__/
 *.pyc
 *.egg-info/
 build/
 dist/
 
 # Cachés de tooling
-cache/
 .pytest_cache/
+.mypy_cache/
 .ruff_cache/
+cache/
+
+# Dataset de stress testing: no entra a la imagen de producción.
+# Los PDFs pesan ~9 MB y los resultados son artefactos locales.
+tests/stress/pdfs
+tests/stress/results
+tests/stress/pdfs/manifest.json
 
 # Logs
 *.log
@@ -26,6 +34,6 @@ cache/
 Dockerfile
 .dockerignore
 
-# Documentacion no requerida en la imagen
+# Documentación no requerida en la imagen
+*.md
 LICENSE
-README.md
