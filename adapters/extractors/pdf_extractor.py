@@ -15,6 +15,7 @@ Gestión de memoria bajo carga:
 - Toda la dependencia de la librería queda confinada en este módulo.
 """
 
+import threading
 import time
 from io import BytesIO
 from math import inf
@@ -33,6 +34,14 @@ from domain.ports.text_extractor import PdfToMarkdown
 _UNBOUNDED_LEFT = -inf
 _UNBOUNDED = inf
 
+# PDFium (la libreria nativa) NO es thread-safe: dos extracciones
+# concurrentes en el mismo proceso producen `PdfiumError: Data format
+# error` espurios sobre PDFs validos (observado bajo spike: 400
+# CORRUPT_FILE intermittentes). La seccion pdfium queda serializada por
+# proceso; el paralelismo real lo aportan los workers/replicas, no los
+# threads del pool.
+_PDFIUM_LOCK = threading.Lock()
+
 
 class PdfTextExtractor(PdfToMarkdown):
     """Extrae texto de PDFs con pdfium, con métricas y memoria acotada."""
@@ -40,9 +49,10 @@ class PdfTextExtractor(PdfToMarkdown):
     def extract(self, content: bytes, filename: str) -> ExtractionResult:
         started = time.perf_counter()
         try:
-            with pdfium.PdfDocument(BytesIO(content), autoclose=True) as document:
-                page_count = len(document)
-                page_markdowns, pages_processed = self._render_pages(document)
+            with _PDFIUM_LOCK:
+                with pdfium.PdfDocument(BytesIO(content), autoclose=True) as document:
+                    page_count = len(document)
+                    page_markdowns, pages_processed = self._render_pages(document)
         except pdfium.PdfiumError as error:
             # PdfiumError hereda de RuntimeError: se traduce SIEMPRE aqui
             # para que la infraestructura no escape del adaptador.

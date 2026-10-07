@@ -2,7 +2,11 @@ name: pdf-extractor-tp1
 
 # Anchors reutilizables: límites explícitos por réplica (R7)
 x-extractor-resources: &extractor-resources
-  cpus: "1.0"
+  # 1.0 CPU/replica alcanza para 0% de error (sin rechazos) pero NO para
+  # los thresholds de latencia del spike: la extraccion es CPU-bound.
+  # 3.0 + 4 workers (cada proceso pdfium serializado por lock) da
+  # canales nativos paralelos reales.
+  cpus: "3.0"
   mem_limit: 768m
   mem_reservation: 512m
 
@@ -25,10 +29,23 @@ services:
       <<: *common-env
       # Timeout de extracción: Traefik SIEMPRE debe cortar más tarde que esto
       EXTRACT_TIMEOUT_SECONDS: ${EXTRACT_TIMEOUT_SECONDS:-60}
+      # --- Dimensionado del spike (Issue 31, 100 VUs) ---
+      # Sin estos overrides el TP falla: 429 por admission timeout con 10 s
+      # de espera y 503 por el tope HTTP de 6 conexiones/worker.
+      # Defaults del compose (no del código, que conserva los suyos).
+      ADMISSION_TIMEOUT_SECONDS: ${ADMISSION_TIMEOUT_SECONDS:-60.0}
+      QUEUE_MAX_SIZE: ${QUEUE_MAX_SIZE:-256}
+      HTTP_LIMIT_CONCURRENCY: ${HTTP_LIMIT_CONCURRENCY:-64}
+      # 4 workers: cada proceso serializa pdfium con un lock (PDFium NO es
+      # thread-safe), así que los procesos son los canales paralelos reales
+      # sobre los 3 CPUs por réplica.
+      UVICORN_WORKERS: ${UVICORN_WORKERS:-4}
+      EXTRACTION_POOL_SIZE: ${EXTRACTION_POOL_SIZE:-4}
+
     deploy:
       replicas: 5
     # Límites explícitos de CPU y RAM por réplica
-    cpus: "1.0"
+    cpus: "3.0"
     mem_limit: 768m
     mem_reservation: 512m
     restart: unless-stopped
