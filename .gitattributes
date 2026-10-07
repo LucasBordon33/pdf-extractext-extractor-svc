@@ -1,0 +1,5 @@
+# Los .sh se ejecutan como entrypoint en contenedores Linux y en CI.
+# Un CRLF en el shebang hace que el kernel busque /bin/sh^M y falle con
+# "script not found" (exit 255). Forzar LF evita que el checkout en
+# Windows reintroduzca el bug.
+*.sh text eol=lf
