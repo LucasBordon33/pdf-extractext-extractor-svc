@@ -68,7 +68,7 @@ jobs:
         with:
           filename: load/k6-smoke.js
         env:
-          BASE_URL: http://localhost:8000
+          BASE_URL: http://172.17.0.1:8000  
 
       - name: Logs del servicio (solo si el smoke falla)
         if: failure()

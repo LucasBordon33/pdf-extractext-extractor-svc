@@ -21,7 +21,7 @@ export const options = {
 // Mismo PDF que el test de contrato (tests/contract/test_tp_contract.py).
 const pdf = open("../tests/fixtures/official_sample.pdf", "b");
 
-const BASE_URL = __ENV.BASE_URL || "http://localhost:8000";
+const BASE_URL = __ENV.BASE_URL || "http://localhost:8080";
 
 export default function () {
   const response = http.post(`${BASE_URL}/extract`, pdf, {
