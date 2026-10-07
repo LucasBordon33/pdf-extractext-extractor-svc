@@ -64,7 +64,7 @@ jobs:
           echo "el servicio no levantó en 30 s" && exit 1
 
       - name: Smoke k6 (contrato bajo concurrencia)
-        uses: grafana/k6-action@v0.4.1
+        uses: grafana/k6-action@v0.3.1
         with:
           filename: load/k6-smoke.js
         env:
