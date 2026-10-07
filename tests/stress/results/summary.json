@@ -1,0 +1,38 @@
+{
+  "fecha": "2026-10-07T12:12:29",
+  "git_commit": "4e47577d8f675fb059be12724739a08a6f7088b1",
+  "python_version": "3.14.6",
+  "docker_version": "Docker version 29.8.2, build 7fc2dff",
+  "entorno": {
+    "UVICORN_WORKERS": null,
+    "REPLICAS": null
+  },
+  "criterio_correccion": "0% de error en k6 y Vegeta",
+  "veredito": "PASS",
+  "k6": {
+    "p50_ms": 69.750434,
+    "p90_ms": 191.2887814,
+    "p95_ms": 251.3623704,
+    "max_ms": 680.919028,
+    "error_rate": 0.0,
+    "requests": 33425
+  },
+  "vegeta": {
+    "p50_ms": 15.432287,
+    "p90_ms": 19.147485,
+    "p95_ms": 19.97877,
+    "p99_ms": 21.929713,
+    "max_ms": 26.701381,
+    "error_rate": 0.0,
+    "requests": 1500,
+    "throughput_rps": 50.10812164798347
+  },
+  "umbrales_profesor": {
+    "error_rate": 0.0,
+    "p50_ms": 1880.0,
+    "p90_ms": 7830.0,
+    "p95_ms": 8800.0,
+    "p99_ms": 10000.0,
+    "max_ms": 13940.0
+  }
+}

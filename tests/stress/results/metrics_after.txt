@@ -1,0 +1,37 @@
+# HELP extract_requests_total Requests de extraccion completados por status HTTP.
+# TYPE extract_requests_total counter
+extract_requests_total{status="200"} 1956
+# HELP extract_duration_seconds Duracion del request de extraccion completo (segundos).
+# TYPE extract_duration_seconds histogram
+extract_duration_seconds_bucket{le="0.5"} 1956
+extract_duration_seconds_bucket{le="1"} 3912
+extract_duration_seconds_bucket{le="2"} 5868
+extract_duration_seconds_bucket{le="5"} 7824
+extract_duration_seconds_bucket{le="10"} 9780
+extract_duration_seconds_bucket{le="25"} 11736
+extract_duration_seconds_bucket{le="+Inf"} 1956
+extract_duration_seconds_sum 135.422
+extract_duration_seconds_count 1956
+# HELP extractions_in_flight Extracciones en vuelo en este instante.
+# TYPE extractions_in_flight gauge
+extractions_in_flight 0
+# HELP admission_wait_seconds Segundos esperando por un lugar de extraccion.
+# TYPE admission_wait_seconds histogram
+admission_wait_seconds_bucket{le="0.1"} 1951
+admission_wait_seconds_bucket{le="0.25"} 3907
+admission_wait_seconds_bucket{le="0.5"} 5863
+admission_wait_seconds_bucket{le="1"} 7819
+admission_wait_seconds_bucket{le="2"} 9775
+admission_wait_seconds_bucket{le="5"} 11731
+admission_wait_seconds_bucket{le="10"} 13687
+admission_wait_seconds_bucket{le="+Inf"} 1956
+admission_wait_seconds_sum 20.6652
+admission_wait_seconds_count 1956
+# HELP admission_rejections_total Rechazos de admision por clase (overloaded | queue_saturated).
+# TYPE admission_rejections_total counter
+# HELP pages_processed_total Paginas aportadas al resultado de extraccion.
+# TYPE pages_processed_total counter
+pages_processed_total 1956
+# HELP bytes_read_total Bytes de PDF que llegaron a la extraccion.
+# TYPE bytes_read_total counter
+bytes_read_total 70994976
