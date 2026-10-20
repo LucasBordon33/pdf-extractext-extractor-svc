@@ -59,11 +59,12 @@ services:
       start_period: 45s
     networks:
       - loadtest
+      - pdf-extractext-network
     labels:
       - "traefik.enable=true"
       # Puerto interno real del servicio en cada réplica
       - "traefik.http.services.extractor.loadbalancer.server.port=8000"
-      - "traefik.http.routers.extractor.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.extractor.rule=Host(`extractor.localhost`) || Host(`localhost`) || Host(`127.0.0.1`) || Host(`traefik`)"
       - "traefik.http.routers.extractor.entrypoints=web"
 
   traefik:
@@ -171,3 +172,6 @@ networks:
   # Red propia del TP (sin orquestador, Traefik descubre por label aquí)
   loadtest:
     driver: bridge
+  pdf-extractext-network:
+    external: true
+    name: pdf-extractext_pdf-extractext-network
