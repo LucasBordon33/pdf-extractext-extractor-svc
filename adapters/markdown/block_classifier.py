@@ -32,7 +32,6 @@ BlockKind = Literal["heading", "list", "paragraph"]
 
 @dataclass(frozen=True)
 class ClassifiedBlock:
-    """Bloque clasificado listo para renderizar a Markdown."""
 
     kind: BlockKind
     level: int  # 1-3 para encabezados; 0 para el resto
@@ -40,7 +39,6 @@ class ClassifiedBlock:
 
 
 def classify_blocks(blocks: list[TextBlock]) -> list[ClassifiedBlock]:
-    """Clasifica bloques en encabezados, listas y párrafos."""
     cleaned = _discard_whitespace(blocks)
     if not cleaned:
         return []
@@ -81,11 +79,6 @@ def _discard_whitespace(blocks: list[TextBlock]) -> list[TextBlock]:
 def _heading_levels_by_relative_size(
     blocks: list[TextBlock], median_size: float
 ) -> dict[float, int]:
-    """Mapea cada fuente candidata a su nivel relativo de encabezado.
-
-    Solo encabezan candidatos los bloques cortos (< HEADING_MAX_CHARS):
-    un texto largo en fuente grande es un párrafo, no un título.
-    """
     candidate_sizes = sorted(
         {
             block.font_size
@@ -103,7 +96,6 @@ def _heading_levels_by_relative_size(
 def _merge_consecutive_paragraphs(
     blocks: list[ClassifiedBlock],
 ) -> list[ClassifiedBlock]:
-    """Une párrafos consecutivos: continúan el mismo párrafo."""
     merged: list[ClassifiedBlock] = []
     for block in blocks:
         if (

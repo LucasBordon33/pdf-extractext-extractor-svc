@@ -22,7 +22,6 @@ _EXCESS_NEWLINES_RE = re.compile(r"\n{3,}")
 
 
 def build_page_markdown(blocks: list[ClassifiedBlock]) -> str:
-    """Ensambla el Markdown de una página."""
     parts = []
     for block in blocks:
         if block.kind == "heading":
@@ -35,13 +34,11 @@ def build_page_markdown(blocks: list[ClassifiedBlock]) -> str:
 
 
 def build_document(page_markdowns: list[str]) -> str:
-    """Une el Markdown de las páginas con el separador de página."""
     pages = [page for page in page_markdowns if page.strip()]
     return _finalize(PAGE_SEPARATOR.join(pages))
 
 
 def _finalize(text: str) -> str:
-    """Limpieza final determinista del documento."""
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     text = "\n".join(line.rstrip() for line in text.split("\n"))
     text = _EXCESS_NEWLINES_RE.sub("\n\n", text)

@@ -38,12 +38,6 @@ _RETRY_AFTER_OVERLOADED = 1
 
 
 class DocumentService:
-    """Orquesta la extracción con validación, admisión, pool y deadline.
-
-    ``max_concurrent_extractions`` acota los lugares de extracción. El
-    pool aplica además su propio semáforo de concurrencia con el mismo
-    valor: la concurrencia real queda acotada por el menor de los dos.
-    """
 
     def __init__(
         self,
@@ -65,15 +59,6 @@ class DocumentService:
         self._admission_observer = admission_observer
 
     def extract(self, content: bytes, filename: str) -> ExtractionResult:
-        """Devuelve el resultado enriquecido de la extracción.
-
-        :raises FileTooLargeError: el contenido supera el máximo.
-        :raises OverloadedError: no se consiguió un lugar a tiempo.
-        :raises QueueSaturatedError: el pool rechazó el trabajo.
-        :raises ExtractionTimeoutError: venció el deadline interno.
-        :raises CorruptFileError: el contenido no puede procesarse.
-        :raises EmptyExtractionError: no se obtuvo texto válido.
-        """
         self._ensure_size(content, filename)
         self._admit(filename)
         try:
@@ -82,35 +67,15 @@ class DocumentService:
             )
             return self._await_result(future, filename)
         finally:
-            # El lugar vuelve pase lo que pase: éxito, fallo del
-            # extractor, deadline o rechazo del pool. Una fuga acá
-            # degrada el servicio de forma irreversible.
             self._admission.release()
 
     def can_accept_work(self) -> bool:
-        """True si hay un lugar de admisión libre (readiness).
-
-        No consume el lugar: lo toma y lo devuelve al instante, solo
-        para que ``GET /ready`` distinga saturación de indisponibilidad.
-        """
         if self._admission.acquire(blocking=False):
             self._admission.release()
             return True
         return False
 
     def _admit(self, filename: str) -> None:
-        """Toma un lugar de extracción, esperando como máximo el timeout.
-
-        La espera es bloqueante a propósito: el endpoint es síncrono y
-        el TP lo exige, así que no hay event loop al que ceder el control.
-
-        El tiempo de espera se le notifica al ``admission_observer``
-        (si hay uno) pase lo que pase: alimenta el histograma
-        ``admission_wait_seconds`` (ISSUE-014). El dominio sigue sin
-        conocer las métricas: solo recibe un callback.
-
-        :raises OverloadedError: el lugar no llegó a tiempo.
-        """
         started = time.monotonic()
         acquired = self._admission.acquire(timeout=self._admission_timeout_seconds)
         if self._admission_observer is not None:
@@ -136,8 +101,6 @@ class DocumentService:
         try:
             return future.result(timeout=self._timeout_seconds)
         except FutureTimeoutError as error:
-            # El semáforo se libera en el pool (finally del trabajo):
-            # cancelar aquí no puede dejar slots tomados.
             future.cancel()
             raise ExtractionTimeoutError(
                 f"la extraccion de '{filename}' supero el deadline de"

@@ -63,22 +63,12 @@ EXTRACT_RESPONSES: dict[int | str, dict[str, Any]] = {
 
 @dataclass(frozen=True)
 class ExtractInput:
-    """Body ya resuelto y validado en la frontera.
-
-    Tiene los bytes y el nombre saneado; el dominio no conoce el
-    transporte (multipart vs. binario crudo).
-    """
 
     content: bytes
     filename: str
 
 
 async def read_extract_input(request: Request) -> ExtractInput:
-    """Resuelve la entrada según el ``Content-Type`` (ISSUE-012).
-
-    multipart/form-data → campo ``file``; cualquier otro (incluida la
-    ausencia de header) → binario crudo. Valida el magic number ``%PDF-``.
-    """
     max_bytes = get_settings().max_upload_size_mb * _BYTES_PER_MB
     content_type = (request.headers.get("content-type") or "").split(";", 1)[0]
     if content_type.strip().lower() == "multipart/form-data":
@@ -99,7 +89,6 @@ async def read_extract_input(request: Request) -> ExtractInput:
     response_description="200 mientras el proceso está vivo",
 )
 def health() -> dict[str, str]:
-    """Responde 200 sin tocar el pool: solo dice que el proceso vive."""
     return {"status": "ok"}
 
 
@@ -111,7 +100,6 @@ def health() -> dict[str, str]:
 def ready(
     document_service: DocumentService = Depends(get_document_service),
 ) -> JSONResponse:
-    """200 solo si el servicio puede tomar trabajo en este momento."""
     if document_service.can_accept_work():
         return JSONResponse({"status": "ok", "ready": True}, status_code=200)
     return JSONResponse(
@@ -128,7 +116,6 @@ def ready(
     response_description="200 con contadores, gauges e histogramas",
 )
 def metrics() -> Response:
-    """Expone las siete familias sin dependencia de `prometheus_client`."""
     return Response(content=METRICS.render(), media_type="text/plain; version=0.0.4")
 
 
@@ -145,12 +132,6 @@ def extract_document(
     input_data: ExtractInput = Depends(read_extract_input),
     document_service: DocumentService = Depends(get_document_service),
 ) -> ExtractResponse:
-    """Handler deliberadamente delgado: HTTP, headers, DI.
-
-    La entrada ya viene validada (tamaño, multipart, magic number) y
-    sin tocar disco; aquí solo se delega en el dominio y se alimentan
-    las métricas (bytes, páginas, extracciones en vuelo).
-    """
     METRICS.record_bytes(len(input_data.content))
     METRICS.extractions_in_flight.inc()
     try:
@@ -162,5 +143,4 @@ def extract_document(
         response.headers["X-Replica"] = _REPLICA_ID
         return ExtractResponse(content=result.markdown, page_count=result.page_count)
     finally:
-        # El gauge vuelve a 0 pase lo que pase (éxito o error de dominio).
         METRICS.extractions_in_flight.dec()

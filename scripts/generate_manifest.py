@@ -3,9 +3,6 @@
 Barre tests/stress/pdfs/, calcula para cada PDF su tamaño en bytes, su hash
 SHA256 y su número de páginas (vía pypdfium2), y persiste todo en
 tests/stress/pdfs/manifest.json.
-
-Uso:
-    python scripts/generate_manifest.py
 """
 
 import hashlib

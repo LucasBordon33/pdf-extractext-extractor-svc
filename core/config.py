@@ -20,15 +20,8 @@ DEFAULT_ALLOWED_MIME_TYPES = ["application/pdf"]
 
 
 class Settings(BaseSettings):
-    """Configuración del servicio, poblada desde variables de entorno.
-
-    Referencias: ADR-TP-5 (concurrencia), ADR-TP-6/7 (admisión),
-    Twelve-Factor III (port binding) y XI (logs a stdout).
-    """
-
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    # --- Port binding (Twelve-Factor III) ---
     port: int = Field(
         default=8000, ge=1, le=65535, description="Puerto HTTP; Uvicorn lo lee."
     )
@@ -36,7 +29,6 @@ class Settings(BaseSettings):
         default="0.0.0.0", min_length=1, description="Interfaz de binding."
     )
 
-    # --- Tamaño y timeouts ---
     max_upload_size_mb: int = Field(
         default=12,
         gt=0,
@@ -56,7 +48,6 @@ class Settings(BaseSettings):
         ),
     )
 
-    # --- Concurrencia (ADR-TP-5) ---
     uvicorn_workers: int = Field(
         default=2, ge=1, description="Procesos HTTP por replica."
     )
@@ -74,9 +65,6 @@ class Settings(BaseSettings):
         description="Tope de trabajos pendientes en el pool; al superarlo -> 503.",
     )
 
-    # --- Límites del runtime HTTP (ADR-TP-7) ---
-    # Uvicorn, no FastAPI: controlan el servidor antes de que la app vea
-    # el request.
     http_limit_concurrency: int | None = Field(
         default=None,
         gt=0,
@@ -100,14 +88,13 @@ class Settings(BaseSettings):
         ),
     )
 
-    # --- Formatos ---
     allowed_mime_types: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: list(DEFAULT_ALLOWED_MIME_TYPES),
         min_length=1,
         description="Tipos MIME aceptados para procesar.",
     )
 
-    # --- Entorno y logs (Twelve-Factor XI: stdout) ---
+    
     env: Environment = "development"
     log_level: LogLevel = "INFO"
     log_format: LogFormat = "json"
@@ -115,7 +102,7 @@ class Settings(BaseSettings):
     @field_validator("allowed_mime_types", mode="before")
     @classmethod
     def _split_mime_types(cls, value: object) -> object:
-        """Acepta lista JSON o cadena separada por comas desde el entorno."""
+        
         if isinstance(value, str):
             parts = [part.strip() for part in value.split(",")]
             if not parts or any(not part for part in parts):
@@ -126,9 +113,6 @@ class Settings(BaseSettings):
     @field_validator("http_limit_concurrency", mode="before")
     @classmethod
     def _blank_limit_means_no_limit(cls, value: object) -> object:
-        """En un ``.env`` dejar el valor vacío es la forma natural de
-        desactivar el tope; sin esto Pydantic no lo castea a ``int | None``.
-        """
         return None if value == "" else value
 
     @property
@@ -138,5 +122,4 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    """Punto único de acceso a la configuración (singleton cacheado)."""
     return Settings()

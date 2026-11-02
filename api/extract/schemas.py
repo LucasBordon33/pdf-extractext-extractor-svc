@@ -13,11 +13,7 @@ Contrato exacto del TP:
 
 from pydantic import BaseModel, ConfigDict, Field
 
-# Ejemplo REAL copiado de una corrida: el layout del pipeline de
-# ISSUE-006 (titulo en fuente grande + parrafo + item de lista en la
-# misma pagina) se extrajo con PdfTextExtractor y dio exactamente este
-# Markdown, determinista entre corridas (video:
-# ``tests/pipeline/test_markdown_pipeline.py``).
+
 _EXAMPLE_MARKDOWN = (
     "# Titulo Grande\n\n"
     "cuerpo normal\n\n"
@@ -26,7 +22,6 @@ _EXAMPLE_MARKDOWN = (
 
 
 class ExtractResponse(BaseModel):
-    """Respuesta exitosa de la extracción (R3)."""
 
     content: str = Field(
         description="Texto extraído del documento convertido a Markdown (R2/R3).",
@@ -48,7 +43,7 @@ class ExtractResponse(BaseModel):
 
 
 class ErrorResponse(BaseModel):
-    """Cuerpo estándar de error para todos los fallos del endpoint."""
+    
 
     error_code: str = Field(description="Código interno del error de dominio.")
     message: str = Field(description="Descripción legible del fallo.")

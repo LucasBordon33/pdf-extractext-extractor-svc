@@ -26,7 +26,6 @@ _ERROR_STATUS_FROM = 400
 
 
 class TimingMiddleware:
-    """Registra status y duración de cada request de extracción."""
 
     def __init__(self, app: Any) -> None:
         self.app = app
@@ -51,13 +50,6 @@ class TimingMiddleware:
 
 
 class RequestContextMiddleware:
-    """Request_id en contexto + una línea JSON por request.
-
-    El ``X-Request-ID`` del cliente se honra (correlación con k6/Vegeta);
-    si no viene, se genera un ``uuid4``. La línea de log se emite siempre
-    (éxito o error), con ``status`` y, cuando el response es un error,
-    el ``error_code`` extraído del ``ErrorResponse``.
-    """
 
     def __init__(self, app: Any) -> None:
         self.app = app

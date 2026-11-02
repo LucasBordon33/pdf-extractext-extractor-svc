@@ -35,9 +35,6 @@ _BUILTIN_HANDLERS: dict[type[Exception], tuple[int, str]] = {
 
 
 def register_exception_handlers(app: FastAPI) -> None:
-    """Registra todos los handlers de error en la app."""
-    # cast: el tipo de Starlette exige ``Exception`` genérica; los
-    # handlers tipados por subclase son correctos por contravarianza.
     app.add_exception_handler(
         RequestValidationError, cast(ExceptionHandler, _validation_error_handler)
     )
@@ -54,8 +51,6 @@ def register_exception_handlers(app: FastAPI) -> None:
 def _error_response(
     status_code: int, error_code: str, message: str
 ) -> JSONResponse:
-    # exclude_none: "retry_after_seconds" solo aparece cuando corresponde
-    # (429/503); en el resto la forma wire queda {error_code, message}.
     body = ErrorResponse(error_code=error_code, message=message).model_dump(
         exclude_none=True
     )
@@ -71,18 +66,14 @@ def _validation_error_handler(
 def _domain_error_handler(
     request: Request, exc: DocumentExtractionError
 ) -> JSONResponse:
-    # Anota 429/503 en la métrica de rechazos (ISSUE-014); los demás
-    # error_code no pertenecen a la familia y se ignoran.
     METRICS.record_rejection(exc.error_code)
     response = _error_response(exc.status_http, exc.error_code, str(exc))
-    # 429/503 le dicen al cliente cuando reintentar; el resto no lleva header.
     if exc.retry_after_seconds is not None:
         response.headers["Retry-After"] = str(exc.retry_after_seconds)
     return response
 
 
 def _builtin_error_handler(status_code: int, error_code: str):
-    """Fabrica de handlers para excepciones built-in mapeadas."""
 
     def handler(request: Request, exc: Exception) -> JSONResponse:
         return _error_response(status_code, error_code, str(exc))
@@ -98,7 +89,6 @@ def _unexpected_error_handler(
 
 
 def _first_validation_message(exc: RequestValidationError) -> str:
-    """Resume el primer error de validacion con su campo."""
     if not exc.errors():
         return "payload invalido"
     first = exc.errors()[0]

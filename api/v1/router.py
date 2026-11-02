@@ -41,7 +41,6 @@ router.add_api_route(
 )
 
 def health() -> dict[str, str]:
-    """Responde 200 mientras el proceso está vivo (alias de la raíz)."""
     return {"status": "ok"}
 
 @router.get("/ready", summary="Readiness probe para Docker")

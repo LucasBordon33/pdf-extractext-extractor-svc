@@ -1,9 +1,5 @@
 """Lectura del cuerpo HTTP en streaming, sin volcar a disco (R11).
 
-La pauta R11 pide no duplicar buffers y no tocar disco. En lugar de
-``await request.body()`` (copia interna de Starlette) o del multipart
-de ``python-multipart`` que spool a disco al superar 1 MB, este módulo:
-
 - ``read_body`` acumula el binario crudo en un único ``io.BytesIO``
   leyendo a chunks desde ``request.stream()``.
 - ``read_multipart`` parsea el multipart con el parser feedable de
@@ -32,8 +28,7 @@ from typing import TYPE_CHECKING
 from python_multipart.multipart import MultipartParser, parse_options_header
 
 if TYPE_CHECKING:
-    # TypedDict interna de python-multipart (solo existe bajo
-    # TYPE_CHECKING en el paquete): da tipo exacto a los callbacks.
+    
     from python_multipart.multipart import MultipartCallbacks
 
 from core.exceptions import EmptyBodyError, FileTooLargeError, MissingFileFieldError
@@ -47,23 +42,12 @@ _CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
 
 
 def sanitize_filename(name: str) -> str:
-    """Solo el nombre base: sin rutas, sin bytes de control, acotado.
-
-    ``sanitize_filename("../../etc/passwd")`` → ``"passwd"``. Un nombre
-    vacío o inválido cae a un default seguro.
-    """
     cleaned = _CONTROL_CHARS.sub("", name)
     basename = cleaned.replace("\\", "/").rsplit("/", 1)[-1]
     return basename[:_MAX_FILENAME_CHARS] or _DEFAULT_FILENAME
 
 
 async def read_body(request, max_bytes: int) -> bytes:
-    """Lee el body crudo en chunks con corte duro en ``max_bytes``.
-
-    Primero responde 413 con el ``Content-Length`` sin tocar el body;
-    luego aborta en cuanto la suma de chunks supera el tope. El único
-    comportamiento es la frontera ASGI; las decisiones son síncronas.
-    """
     _ensure_declared_within(_declared_length(request), max_bytes)
 
     buffer = io.BytesIO()
@@ -77,12 +61,6 @@ async def read_body(request, max_bytes: int) -> bytes:
 
 
 async def read_multipart(request, max_bytes: int) -> tuple[bytes, str]:
-    """Extrae el campo ``file`` de un multipart sin spool a disco.
-
-    Devuelve ``(bytes del archivo, filename sanitizado)``. El tope se
-    aplica a los bytes del archivo en sí (el sobre multipart puede ser
-    más grande sin que eso importe).
-    """
     _, params = parse_options_header(request.headers.get("content-type"))
     boundary = params.get(b"boundary")
     if not boundary:
@@ -96,7 +74,6 @@ async def read_multipart(request, max_bytes: int) -> tuple[bytes, str]:
 
 
 def _declared_length(request) -> int | None:
-    """Devuelve el ``Content-Length`` si es un entero válido, si no None."""
     header = request.headers.get("content-length")
     if header is None or not header.isdigit():
         return None
@@ -104,13 +81,11 @@ def _declared_length(request) -> int | None:
 
 
 def _ensure_declared_within(declared: int | None, max_bytes: int) -> None:
-    """Rechaza 413 por el header antes de leer, sin bloquear nada."""
     if declared is not None and declared > max_bytes:
         _raise_too_large(max_bytes)
 
 
 def _ensure_room(current: int, incoming: int, max_bytes: int) -> None:
-    """Aborta en cuanto el acumulado más el chunk entrante excede el tope."""
     if current + incoming > max_bytes:
         _raise_too_large(max_bytes)
 
@@ -123,11 +98,6 @@ def _ensure_not_empty(content: bytes) -> None:
 def _build_multipart_parser(
     max_bytes: int, boundary: bytes
 ) -> tuple[MultipartParser, "_FileCollector"]:
-    """Parser feedable + colector del campo ``file``.
-
-    Fabricado así para que el parseo (síncrono) sea testeable sin
-    pasar por el loop async del socket.
-    """
     collector = _FileCollector(max_bytes)
     callbacks: MultipartCallbacks = {
         "on_part_begin": collector.on_part_begin,
@@ -147,12 +117,6 @@ def _raise_too_large(max_bytes: int) -> None:
 
 
 class _FileCollector:
-    """Acumula en memoria los bytes del campo ``file`` del multipart.
-
-    Los demás campos se ignoran sin materializarlos. Si el archivo
-    supera ``max_bytes`` se aborta apenas se detecta, sin llegar a
-    almacenarlo completo.
-    """
 
     def __init__(self, max_bytes: int) -> None:
         self._max_bytes = max_bytes

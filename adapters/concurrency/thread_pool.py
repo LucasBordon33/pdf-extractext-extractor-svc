@@ -68,7 +68,6 @@ class ThreadPoolExtractionPool(ExtractionPool):
             raise
 
     def _reserve(self) -> None:
-        """Toma un lugar en la cola o lanza ``QueueSaturatedError``."""
         with self._lock:
             if self._outstanding >= self._max_queue_depth:
                 raise QueueSaturatedError(
@@ -85,7 +84,6 @@ class ThreadPoolExtractionPool(ExtractionPool):
     def _tracked(
         self, work: Callable[[], ExtractionResult]
     ) -> Callable[[], ExtractionResult]:
-        """Envuelve el trabajo para devolver su lugar en la cola al terminar."""
 
         def tracked() -> ExtractionResult:
             try:

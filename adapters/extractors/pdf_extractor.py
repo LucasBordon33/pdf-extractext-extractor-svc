@@ -29,8 +29,6 @@ from core.exceptions import CorruptFileError, EmptyExtractionError
 from domain.models.extraction_result import ExtractionResult
 from domain.ports.text_extractor import PdfToMarkdown
 
-# Bounds sin limite: recupera texto aunque el contenido se dibuje
-# fuera de la caja de la pagina (get_text_bounded sin args trunca).
 _UNBOUNDED_LEFT = -inf
 _UNBOUNDED = inf
 
@@ -44,7 +42,6 @@ _PDFIUM_LOCK = threading.Lock()
 
 
 class PdfTextExtractor(PdfToMarkdown):
-    """Extrae texto de PDFs con pdfium, con métricas y memoria acotada."""
 
     def extract(self, content: bytes, filename: str) -> ExtractionResult:
         started = time.perf_counter()
@@ -54,8 +51,6 @@ class PdfTextExtractor(PdfToMarkdown):
                     page_count = len(document)
                     page_markdowns, pages_processed = self._render_pages(document)
         except pdfium.PdfiumError as error:
-            # PdfiumError hereda de RuntimeError: se traduce SIEMPRE aqui
-            # para que la infraestructura no escape del adaptador.
             raise CorruptFileError(
                 f"no se pudo procesar el PDF '{filename}': {error}"
             ) from error

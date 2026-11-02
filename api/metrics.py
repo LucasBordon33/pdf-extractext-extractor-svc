@@ -28,7 +28,6 @@ _ADMISSION_WAIT_BUCKETS = (0.1, 0.25, 0.5, 1, 2, 5, 10)
 
 
 class Counter:
-    """Contador con soporte de labels (dict inmutado como clave)."""
 
     def __init__(self, name: str, help_text: str) -> None:
         self._name = name
@@ -56,7 +55,6 @@ class Counter:
 
 
 class Gauge:
-    """Valor que puede subir y bajar (p. ej. extracciones en vuelo)."""
 
     def __init__(self, name: str, help_text: str) -> None:
         self._name = name
@@ -81,7 +79,6 @@ class Gauge:
 
 
 class Histogram:
-    """Histograma Prometheus: buckets acumulativos + sum + count."""
 
     def __init__(
         self, name: str, help_text: str, buckets: Iterable[float]
@@ -118,11 +115,6 @@ class Histogram:
 
 
 class Metrics:
-    """Singleton con las siete familias y los helpers para alimentarlas.
-
-    ``reset()`` restaura el estado a cero (aislamiento en tests); en
-    producción el objeto nunca se reinicia.
-    """
 
     def __init__(self) -> None:
         self.extract_requests_total = Counter(
@@ -169,11 +161,9 @@ class Metrics:
         )
 
     def reset(self) -> None:
-        """Devuelve todos los contadores a su estado inicial."""
         type(self).__init__(self)
 
     def render(self) -> str:
-        """Todo el texto Prometheus para ``GET /metrics``."""
         lines: list[str] = []
         for metric in self._all:
             lines.extend(metric.render())
@@ -184,7 +174,6 @@ class Metrics:
         self.extract_duration_seconds.observe(duration_s)
 
     def record_rejection(self, error_code: str) -> None:
-        """Anota 429/503 en ``admission_rejections_total`` si corresponde."""
         kind = REJECTION_KINDS.get(error_code)
         if kind is not None:
             self.admission_rejections_total.inc(labels={"kind": kind})

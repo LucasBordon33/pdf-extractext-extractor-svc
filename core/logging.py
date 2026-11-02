@@ -31,11 +31,6 @@ _OPTIONAL_FIELDS = ("duration_ms", "status", "error_code")
 
 
 class JsonLogFormatter(logging.Formatter):
-    """Serializa cada registro como un objeto JSON en una sola línea.
-
-    Los campos opcionales se leen del propio ``LogRecord`` (los escribe
-    el emisor con ``extra=``) o del ``ContextVar`` de ``request_id``.
-    """
 
     def format(self, record: logging.LogRecord) -> str:
         payload: dict[str, Any] = {
@@ -56,11 +51,6 @@ class JsonLogFormatter(logging.Formatter):
 
 
 def configure_logging(level: str = "INFO", fmt: str = "json") -> None:
-    """Configura el root logger para emitir a stdout; no-op si ya se hizo.
-
-    ``fmt="json"`` usa ``JsonLogFormatter``; ``"text"`` mantiene el
-    formato clásico para desarrollo local sin jq.
-    """
     root = logging.getLogger()
     if getattr(root, _CONFIGURE_SENTINEL, False):
         return
@@ -78,5 +68,4 @@ def configure_logging(level: str = "INFO", fmt: str = "json") -> None:
 
 
 def get_logger(name: str) -> logging.Logger:
-    """Logger de aplicación bajo el namespace ``pdf_extractext.*``."""
     return logging.getLogger(f"pdf_extractext.{name}")

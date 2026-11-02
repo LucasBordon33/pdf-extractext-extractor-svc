@@ -18,17 +18,13 @@ from dataclasses import dataclass
 import pypdfium2 as pdfium
 import pypdfium2.raw as pdfium_raw
 
-# Solapamiento estricto para considerar dos caracteres en la misma línea.
 _LINE_OVERLAP_EPSILON = 0.01
-# Hueco vertical (como fracción de la fuente menor) que separa bloques.
 _BLOCK_GAP_FACTOR = 0.6
-# Padding de la caja al pedir texto: evita truncado en los bordes.
 _BBOX_PAD = 1.0
 
 
 @dataclass(frozen=True)
 class TextBlock:
-    """Bloque de texto con su caja y tamaño de fuente mediano."""
 
     text: str
     font_size: float
@@ -45,7 +41,6 @@ class _Line:
 
 
 def segment_page(text_page: pdfium.PdfTextPage) -> list[TextBlock]:
-    """Devuelve los bloques de texto de una página, en orden de lectura."""
     lines = _collect_lines(text_page)
     blocks: list[list[_Line]] = _group_lines_into_blocks(lines)
     return [_to_text_block(text_page, block) for block in blocks]
@@ -57,8 +52,6 @@ def _collect_lines(text_page: pdfium.PdfTextPage) -> list[_Line]:
     for index in range(char_count):
         left, bottom, right, top = text_page.get_charbox(index)
         if top <= bottom:
-            # Pseudo-caracteres (\r, \n): sin geometría, romperian el
-            # cálculo de huecos con su fuente falsa de 1pt.
             continue
         size = pdfium_raw.FPDFText_GetFontSize(text_page.raw, index)
         current = lines[-1] if lines else None
