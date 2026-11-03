@@ -13,7 +13,6 @@ Contrato exacto del TP:
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 _EXAMPLE_MARKDOWN = (
     "# Titulo Grande\n\n"
     "cuerpo normal\n\n"
