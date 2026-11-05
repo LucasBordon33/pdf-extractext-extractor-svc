@@ -1,0 +1,42 @@
+name: pdf-extractor-tests
+
+services:
+  k6:
+    image: grafana/k6:0.54.0
+    container_name: pdf-stress-k6
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      TARGET_URL: ${TARGET_URL:-http://traefik}
+      VUS: ${K6_VUS:-50}
+      DURATION: ${K6_DURATION:-2m}
+    volumes:
+      - ./scripts:/scripts:ro
+      - ./data:/data:ro
+    working_dir: /scripts
+    command: ["run", "/scripts/load-test.js"]
+    networks:
+      - pdf-extractext-network
+
+  vegeta:
+    image: peterevans/vegeta:latest
+    container_name: pdf-stress-vegeta
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      TARGET_URL: ${TARGET_URL:-http://traefik}
+      RATE: ${VEGETA_RATE:-200}
+      DURATION: ${VEGETA_DURATION:-2m}
+    volumes:
+      - ./scripts:/scripts:ro
+      - ./data:/data:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["cat /scripts/targets.txt | vegeta attack -rate=\"$${RATE}/s\" -duration=\"$${DURATION}\" -targets=/dev/stdin | vegeta report"]
+    networks:
+      - pdf-extractext-network
+
+networks:
+  pdf-extractext-network:
+    external: true

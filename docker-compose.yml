@@ -1,13 +1,6 @@
 name: pdf-extractor-tp1
 
-# Anchors reutilizables: límites explícitos por réplica (R7)
-x-extractor-resources: &extractor-resources
-  cpus: "3.0"
-  mem_limit: 768m
-  mem_reservation: 512m
-
 x-common-env: &common-env
-
   LOG_LEVEL: ${LOG_LEVEL:-INFO}
 
 services:
@@ -16,26 +9,25 @@ services:
       context: .
       dockerfile: Dockerfile
     image: pdf-extractor:latest
-   
     env_file:
-      
       - path: .env
         required: false
     environment:
       <<: *common-env
-      
       EXTRACT_TIMEOUT_SECONDS: ${EXTRACT_TIMEOUT_SECONDS:-60}
       ADMISSION_TIMEOUT_SECONDS: ${ADMISSION_TIMEOUT_SECONDS:-60.0}
       QUEUE_MAX_SIZE: ${QUEUE_MAX_SIZE:-256}
       HTTP_LIMIT_CONCURRENCY: ${HTTP_LIMIT_CONCURRENCY:-64}
       UVICORN_WORKERS: ${UVICORN_WORKERS:-4}
       EXTRACTION_POOL_SIZE: ${EXTRACTION_POOL_SIZE:-4}
-
     deploy:
       replicas: 5
-    cpus: "3.0"
-    mem_limit: 768m
-    mem_reservation: 512m
+      resources:
+        limits:
+          cpus: "3.0"
+          memory: 768M
+        reservations:
+          memory: 512M
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health', timeout=4).status == 200 else 1)\""]
@@ -44,97 +36,25 @@ services:
       retries: 5
       start_period: 45s
     networks:
-      - loadtest
       - pdf-extractext-network
     labels:
       - "traefik.enable=true"
-      - "traefik.http.services.extractor.loadbalancer.server.port=8000"
-      - "traefik.http.routers.extractor.rule=Host(`extractor.localhost`) || Host(`localhost`) || Host(`127.0.0.1`) || Host(`traefik`)"
+      - "traefik.docker.network=pdf-extractext-network"
+      
+      - "traefik.http.routers.extractor.rule=Host(`extractor.localhost`) || Host(`localhost`) || Host(`127.0.0.1`)"
       - "traefik.http.routers.extractor.entrypoints=web"
+      - "traefik.http.services.extractor.loadbalancer.server.port=8000"
 
-  traefik:
-   
-    image: traefik:v3.7
-    container_name: pdf-extractor-traefik
-    command:
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--providers.docker.network=pdf-extractor-tp1_loadtest"
-      - "--entrypoints.web.address=:8080"
-      - "--entrypoints.web.transport.respondingTimeouts.readTimeout=120s"
-      - "--entrypoints.web.transport.respondingTimeouts.writeTimeout=120s"
-      - "--entrypoints.web.transport.respondingTimeouts.idleTimeout=180s"
-      - "--api.dashboard=false"
-      - "--api.insecure=false"
-      - "--ping=true"
-      - "--ping.entryPoint=web"
-    ports:
-      - "8080:8080"
-    env_file:
-      - path: .env
-        required: false
-    environment:
-      <<: *common-env
-    cpus: "0.5"
-    mem_limit: 256m
-    mem_reservation: 128m
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "traefik", "healthcheck", "--ping"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    networks:
-      - loadtest
+      - "traefik.http.routers.extractor.middlewares=extractor-retry@docker, extractor-cb@docker"
 
-  k6:
-    image: grafana/k6:0.54.0
-    profiles: ["stress"]
-    env_file:
-      - path: .env
-        required: false
-    environment:
-      TARGET_URL: ${TARGET_URL:-http://traefik:8080}
-      VUS: ${K6_VUS:-50}
-      DURATION: ${K6_DURATION:-2m}
-    volumes:
-      - ./scripts:/scripts:ro
-      - ./data:/data:ro
-    working_dir: /scripts
-    command: ["run", "/scripts/load-test.js"]
-    networks:
-      - loadtest
-    depends_on:
-      traefik:
-        condition: service_started
+      - "traefik.http.middlewares.extractor-retry.retry.attempts=3"
+      - "traefik.http.middlewares.extractor-retry.retry.initialinterval=100ms"
 
-  vegeta:
-    image: peterevans/vegeta:latest
-    profiles: ["stress"]
-    env_file:
-      - path: .env
-        required: false
-    environment:
-      TARGET_URL: ${TARGET_URL:-http://traefik:8080}
-      RATE: ${VEGETA_RATE:-200}
-      DURATION: ${VEGETA_DURATION:-2m}
-    volumes:
-      - ./scripts:/scripts:ro
-      - ./data:/data:ro
-    entrypoint: ["/bin/sh", "-c"]
-    command: ["cat /scripts/targets.txt | vegeta attack -rate=\"$${RATE}/s\" -duration=\"$${DURATION}\" -targets=/dev/stdin | vegeta report"]
-    networks:
-      - loadtest
-    depends_on:
-      traefik:
-        condition: service_started
+      - "traefik.http.middlewares.extractor-cb.circuitbreaker.expression=NetworkErrorRatio() > 0.2 || ResponseCodeRatio(500, 600, 0, 600) > 0.2"
+      - "traefik.http.middlewares.extractor-cb.circuitbreaker.checkperiod=10s"
+      - "traefik.http.middlewares.extractor-cb.circuitbreaker.fallbackduration=15s"
 
 networks:
-  loadtest:
-    driver: bridge
   pdf-extractext-network:
     external: true
-    name: pdf-extractext_pdf-extractext-network
+    external: true
