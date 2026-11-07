@@ -1,20 +1,3 @@
-"""Pool de extracción con threads: executor + semáforo + cola acotada.
-
-Implementación del puerto ``ExtractionPool`` para el composition
-root. La extracción es CPU-bound (pdfium): threads liberan el GIL
-durante el trabajo nativo, así que el paralelismo se consigue sin el
-costo de picklear el PDF hacia otro proceso (ADR-TP-5).
-
-Dos topes distintos y por qué ambos hacen falta:
-
-- ``max_concurrent`` (semáforo): cuántos trabajos **corren** a la vez.
-- ``max_queue_depth``: cuántos trabajos están **pendientes de
-  completarse**, contando los que ya corren. ``ThreadPoolExecutor``
-  encola sin tope, así que sin este control una ráfaga de peticiones se
-  convierte en trabajo que vence antes de ejecutarse — que es
-  justamente el timeout que el TP pide evitar (ADR-TP-7).
-"""
-
 import threading
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -27,13 +10,6 @@ _RETRY_AFTER_SATURATED = 1
 
 
 class ThreadPoolExtractionPool(ExtractionPool):
-    """Ejecuta extracciones en threads con concurrencia y cola acotadas.
-
-    El slot del semáforo se adquiere y libera dentro del trabajo con
-    ``with`` (equivalente a try/finally): aunque el futuro se cancele
-    o el trabajo falle, nunca queda un slot tomado. El contador de la
-    cola se libera en el ``finally`` del mismo trabajo.
-    """
 
     def __init__(
         self,
@@ -51,13 +27,6 @@ class ThreadPoolExtractionPool(ExtractionPool):
     def submit(
         self, work: Callable[[], ExtractionResult]
     ) -> Future[ExtractionResult]:
-        """Entrega el trabajo al executor, o lo rechaza si la cola está llena.
-
-        :raises QueueSaturatedError: ya hay ``max_queue_depth`` trabajos
-            pendientes de completarse. Se rechaza **antes** de encolar,
-            para que el llamador reciba el 503 de inmediato en vez de
-            acumular trabajo que no va a llegar.
-        """
         self._reserve()
         try:
             return self._executor.submit(self._tracked(work))

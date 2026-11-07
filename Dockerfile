@@ -28,6 +28,7 @@ COPY --chown=appuser:appuser api ./api/
 COPY --chown=appuser:appuser core ./core/
 COPY --chown=appuser:appuser domain ./domain/
 COPY --chown=appuser:appuser adapters ./adapters/
+COPY --chown=appuser:appuser infrastructure ./infrastructure/
 COPY --chown=appuser:appuser scripts/start.sh /app/scripts/start.sh
 
 RUN chmod +x /app/scripts/start.sh

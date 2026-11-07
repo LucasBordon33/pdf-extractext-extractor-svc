@@ -6,6 +6,7 @@ from api.error_handlers import register_exception_handlers
 from api.extract.router import router as extract_router
 from api.middleware import RequestContextMiddleware, TimingMiddleware
 from api.v1.router import router as v1_router
+from infrastructure.consul import attach_consul
 
 
 def create_app() -> FastAPI:
@@ -21,4 +22,8 @@ def create_app() -> FastAPI:
     app.add_middleware(RequestContextMiddleware)
     app.include_router(extract_router)
     app.include_router(v1_router)
+    # Service discovery: registro en Consul al iniciar, desregistro al
+    # apagar (SIGINT/SIGTERM). Idempotente y best-effort: si Consul no
+    # está disponible, el servicio sigue levantado.
+    attach_consul(app)
     return app

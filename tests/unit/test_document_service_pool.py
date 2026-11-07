@@ -1,11 +1,3 @@
-"""Tests de concurrencia, deadline y validación del DocumentService.
-
-El pool se dobla con implementaciones de prueba del puerto
-``ExtractionPool``: una ejecuta en un thread real (verifica que el
-trabajo NUNCA corre en el hilo del request), otra nunca completa
-(verifica cancelación + ExtractionTimeoutError).
-"""
-
 import threading
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -33,7 +25,6 @@ JUST_OVER_1_MB = b"x" * (1024 * 1024 + 1)
 
 
 class RecordingPool(ExtractionPool):
-    """Ejecuta en un thread real y registra los trabajos recibidos."""
 
     def __init__(self) -> None:
         self.submitted = 0

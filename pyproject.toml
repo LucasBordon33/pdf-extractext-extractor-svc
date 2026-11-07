@@ -81,7 +81,7 @@ exclude_also = [
 [tool.mypy]
 python_version = "3.11"
 mypy_path = "."
-packages = ["main", "api", "core", "domain", "adapters"]
+packages = ["main", "api", "core", "domain", "adapters", "infrastructure"]
 # gradual: errores reales sin exigir anotar cada función de una vez.
 check_untyped_defs = true
 warn_unused_ignores = true

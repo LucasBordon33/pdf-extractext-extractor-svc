@@ -1,12 +1,4 @@
-﻿"""Punto de entrada del microservicio.
-
-Raiz de composicion: el wiring concreto (PdfTextExtractor,
-ThreadPoolExtractionPool, limites) vive en ``api.dependencies`` y se
-inyecta en el dominio (DocumentService) con los limites del entorno.
-
-Port binding (Twelve-Factor III): Uvicorn lee HOST/PORT del entorno
-via ``Settings`` — nada de puertos hardcodeados.
-"""
+﻿
 
 import uvicorn
 
@@ -15,6 +7,9 @@ from api.dependencies import build_document_service, register
 from core.config import get_settings
 from core.logging import configure_logging
 from domain.services.document_service import DocumentService
+from infrastructure.service_discovery import (
+    configure_logging as configure_discovery_logging,
+)
 
 
 def create_application():
@@ -23,26 +18,19 @@ def create_application():
     ``configure_logging`` es idempotente y va antes de ``create_app``:
     el middleware del ISSUE-014 ya emite una línea JSON por request.
     """
+    settings = get_settings()
     configure_logging(
-        level=get_settings().log_level, fmt=get_settings().log_format
+        level=settings.log_level, fmt=settings.log_format
     )
+    # Logging propio para los eventos de service discovery (INC-7).
+    configure_discovery_logging(settings.log_level)
     app = create_app()
     register(DocumentService, build_document_service())
     return app
 
 
 def run() -> None:
-    """Arranca el servidor con la configuración del entorno.
 
-    ``limit_concurrency`` es **por proceso**: con ``UVICORN_WORKERS``
-    workers el tope efectivo es ``workers x http_limit_concurrency``.
-    Uvicorn responde 503 en texto plano, sin ``Retry-After``, y cierra
-    la conexión, así que ese cuerpo NO es un ``ErrorResponse``.
-
-    El access log de Uvicorn se deja activo a propósito: complementa la
-    línea JSON que ya emite el middleware del ISSUE-014 con la info de
-    red (addr/proto) que esa línea no lleva.
-    """
     settings = get_settings()
     uvicorn.run(
         "main:app",
