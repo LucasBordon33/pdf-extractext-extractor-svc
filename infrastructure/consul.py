@@ -23,7 +23,7 @@ from infrastructure.service_discovery import (
 
 _SERVICE_DEFAULTS = {
     "service_name": "extractor",
-    "service_port": 8000,
+    "service_port": 8002,
     "service_health_path": "/health",
 }
 

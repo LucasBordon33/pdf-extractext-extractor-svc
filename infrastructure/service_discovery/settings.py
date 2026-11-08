@@ -48,7 +48,7 @@ class ServiceDiscoverySettings(BaseSettings):
     service_id: str = ""  # vacío -> f"{service_name}-{hostname}"
     service_host: str = ""  # si se define, fija la dirección registrada
     service_address_mode: Literal["ip", "dns"] = "ip"
-    service_port: int = 8000
+    service_port: int = 8002
     service_health_path: str = "/health"
 
     # --- Health check registrado en Consul ---

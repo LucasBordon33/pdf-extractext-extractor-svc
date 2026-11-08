@@ -30,7 +30,7 @@ services:
           memory: 512M
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "python3 -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health', timeout=4).status == 200 else 1)\""]
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8002/health', timeout=4).status == 200 else 1)\""]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -46,7 +46,7 @@ services:
       # websecure con TLS, si no queda inalcanzable (301 -> 404).
       - "traefik.http.routers.extractor.entrypoints=websecure"
       - "traefik.http.routers.extractor.tls=true"
-      - "traefik.http.services.extractor.loadbalancer.server.port=8000"
+      - "traefik.http.services.extractor.loadbalancer.server.port=8002"
 
       - "traefik.http.routers.extractor.middlewares=extractor-retry@docker, extractor-cb@docker"
 

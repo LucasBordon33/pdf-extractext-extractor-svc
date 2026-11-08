@@ -22,7 +22,7 @@ class TestDefaults:
 
     def test_provides_network_defaults(self):
         settings = Settings()
-        assert settings.port == 8000
+        assert settings.port == 8002
         assert settings.host == "0.0.0.0"
         assert settings.uvicorn_workers == 2
 

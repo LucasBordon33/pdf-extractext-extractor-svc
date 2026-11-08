@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     port: int = Field(
-        default=8000, ge=1, le=65535, description="Puerto HTTP; Uvicorn lo lee."
+        default=8002, ge=1, le=65535, description="Puerto HTTP; Uvicorn lo lee."
     )
     host: str = Field(
         default="0.0.0.0", min_length=1, description="Interfaz de binding."

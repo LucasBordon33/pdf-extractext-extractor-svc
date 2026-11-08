@@ -8,7 +8,7 @@
 set -e
 
 HOST="${HOST:-0.0.0.0}"
-PORT="${PORT:-8000}"
+PORT="${PORT:-8002}"
 UVICORN_WORKERS="${UVICORN_WORKERS:-1}"
 
 exec "$@" --host "$HOST" --port "$PORT" --workers "$UVICORN_WORKERS"

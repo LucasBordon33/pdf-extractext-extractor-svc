@@ -35,10 +35,10 @@ RUN chmod +x /app/scripts/start.sh
 
 USER appuser
 
-EXPOSE 8000
+EXPOSE 8002
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD ["python", "-c", "import os, urllib.request; urllib.request.urlopen(f'http://localhost:{os.environ.get('PORT', '8000')}/api/v1/ready', timeout=4)"]
+    CMD ["python", "-c", "import os, urllib.request; urllib.request.urlopen(f'http://localhost:{os.environ.get('PORT', '8002')}/api/v1/ready', timeout=4)"]
 
 ENTRYPOINT ["/app/scripts/start.sh"]
 CMD ["uvicorn", "main:app"]

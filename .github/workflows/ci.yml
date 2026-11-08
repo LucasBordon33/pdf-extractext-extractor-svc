@@ -54,11 +54,11 @@ jobs:
 
       - name: Levantar el servicio y esperar el healthcheck
         run: |
-          docker run -d --name svc -p 8000:8000 \
+          docker run -d --name svc -p 8002:8002 \
             -e UVICORN_WORKERS=1 \
             pdf-extractext-service:ci
           for i in $(seq 1 30); do
-            curl -sf http://localhost:8000/health > /dev/null && exit 0
+            curl -sf http://localhost:8002/health > /dev/null && exit 0
             sleep 1
           done
           echo "el servicio no levantó en 30 s" && exit 1
@@ -68,7 +68,7 @@ jobs:
         with:
           filename: load/k6-smoke.js
         env:
-          BASE_URL: http://172.17.0.1:8000  
+          BASE_URL: http://172.17.0.1:8002  
 
       - name: Logs del servicio (solo si el smoke falla)
         if: failure()
