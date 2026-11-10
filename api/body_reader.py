@@ -31,12 +31,11 @@ if TYPE_CHECKING:
     
     from python_multipart.multipart import MultipartCallbacks
 
+from core.constants import BYTES_PER_MB, DEFAULT_FILENAME, size_limit_message
 from core.exceptions import EmptyBodyError, FileTooLargeError, MissingFileFieldError
 
-_BYTES_PER_MB = 1024 * 1024
 _MAX_FILENAME_CHARS = 128
 _FILE_FIELD_NAME = b"file"
-_DEFAULT_FILENAME = "documento.pdf"
 
 _CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
 
@@ -44,7 +43,7 @@ _CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
 def sanitize_filename(name: str) -> str:
     cleaned = _CONTROL_CHARS.sub("", name)
     basename = cleaned.replace("\\", "/").rsplit("/", 1)[-1]
-    return basename[:_MAX_FILENAME_CHARS] or _DEFAULT_FILENAME
+    return basename[:_MAX_FILENAME_CHARS] or DEFAULT_FILENAME
 
 
 async def read_body(request, max_bytes: int) -> bytes:
@@ -111,9 +110,7 @@ def _build_multipart_parser(
 
 
 def _raise_too_large(max_bytes: int) -> None:
-    raise FileTooLargeError(
-        "el archivo excede el maximo de " f"{max_bytes // _BYTES_PER_MB} MB"
-    )
+    raise FileTooLargeError(size_limit_message(max_bytes // BYTES_PER_MB))
 
 
 class _FileCollector:

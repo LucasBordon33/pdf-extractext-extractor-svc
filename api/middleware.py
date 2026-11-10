@@ -20,7 +20,7 @@ from core.logging import get_logger, request_id_var
 
 logger = get_logger("api.middleware")
 
-_EXTRACT_PATHS = {"/extract", "/api/v1/extract"}
+_EXTRACT_PATHS = {"/api/v1/extract"}
 _REQUEST_ID_HEADER = b"x-request-id"
 _ERROR_STATUS_FROM = 400
 

@@ -13,7 +13,7 @@
 set -euo pipefail
 
 # --- Parámetros (override por entorno) ---------------------------------------
-BASE_URL="${BASE_URL:-http://localhost:8080}"   # proxy, NO una replica
+BASE_URL="${BASE_URL:-https://localhost:443}"
 RATE="25/2s"                            
 DURATION="${DURATION:-30s}"
 TIMEOUT="${TIMEOUT:-30s}"
@@ -32,7 +32,8 @@ echo "== Vegeta: Open Model ${DURATION} a 50 req/s contra $BASE_URL (balanceando
 
 # --- 4 ataques paralelos: un PDF por proceso (rotación del dataset) ----------
 for i in 1 2 3 4; do
-  echo "POST $BASE_URL/extract" | vegeta attack \
+  echo "POST $BASE_URL/api/v1/extract" | vegeta attack \
+    -insecure \
     -rate="$RATE" \
     -duration="$DURATION" \
     -timeout="$TIMEOUT" \

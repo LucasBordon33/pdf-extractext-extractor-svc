@@ -49,7 +49,7 @@ Dominio, adaptadores e infraestructura están separados (hexagonal): el dominio 
 
 ## 3. Contrato HTTP
 
-### `POST /extract`
+### `POST /api/v1/extract`
 
 Soporta dos modos de entrada, decididos por `Content-Type`:
 

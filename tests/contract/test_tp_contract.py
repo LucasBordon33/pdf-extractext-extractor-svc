@@ -24,7 +24,7 @@ from fastapi.testclient import TestClient
 
 import main
 
-API_URL = "/extract"
+API_URL = "/api/v1/extract"
 PDF_CONTENT_TYPE = "application/pdf"
 
 OFFICIAL_SAMPLE = (

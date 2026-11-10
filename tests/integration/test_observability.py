@@ -23,7 +23,7 @@ import main
 from api.metrics import METRICS
 from tests.fixtures.pdf_factory import pdf_with_text
 
-API_URL = "/extract"
+API_URL = "/api/v1/extract"
 PDF_CONTENT_TYPE = "application/pdf"
 
 FAMILIES = [

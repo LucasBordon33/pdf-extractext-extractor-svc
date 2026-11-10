@@ -21,15 +21,16 @@
  *
  * Ejecucion:
  *   k6 run tests/stress/spike.js
- *   k6 run -e BASE_URL=http://localhost:8080 -e MAX_P95=9000 tests/stress/spike.js
+ *   k6 run -e BASE_URL=https://localhost:443 -e MAX_P95=9000 tests/stress/spike.js
+ *   K6_INSECURE_SKIP_TLS_VERIFY=true k6 run tests/stress/spike.js  # cert autofirmado
  */
 
 import http from 'k6/http';
 import { check } from 'k6';
 
 // --- Escenario y opciones ---------------------------------------------------
-const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080'; // proxy, NO una replica
-const EXTRACT_PATH = __ENV.EXTRACT_PATH || '/extract';
+const BASE_URL = __ENV.BASE_URL || 'https://localhost:443'; // proxy, NO una replica
+const EXTRACT_PATH = __ENV.EXTRACT_PATH || '/api/v1/extract';
 
 export const options = {
   stages: [
@@ -40,6 +41,11 @@ export const options = {
   discardResponseBodies: false,
   // p50/p90/p95/max de tendencia + rate (throughput) en el resumen
   summaryTrendStats: ['min', 'avg', 'p(50)', 'p(90)', 'p(95)', 'max', 'count'],
+  // Traefik en websecure usa TLS (posiblemente cert autofirmado en dev);
+  // saltarse validación de certificado para que k6 no falle el handshake.
+  tls: {
+    insecureSkipTLSVerify: true,
+  },
   thresholds: {
     // Con expectedStatuses(200), cualquier 429/503/no-200 suma a este rate
     http_req_failed: ['rate==0'],

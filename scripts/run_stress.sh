@@ -15,7 +15,7 @@
 # =============================================================================
 set -euo pipefail
 
-BASE_URL="${BASE_URL:-http://localhost:8080}"
+BASE_URL="${BASE_URL:-https://localhost:443}"
 RESULTS_DIR="tests/stress/results"
 PDF_FILES="${PDF_FILES:-prueba.pdf}"
 READY_ATTEMPTS="${READY_ATTEMPTS:-60}"   # ~1 max esperando arranque (1s x intento)
@@ -35,13 +35,10 @@ sleep 10
 echo "== Esperando proxy y replicas healthy (max ${READY_ATTEMPTS}s) =="
 ready=0
 for i in $(seq 1 "$READY_ATTEMPTS"); do
-  health_ok=$(curl -fs -o /dev/null -w "%{http_code}" "$BASE_URL/health" || true)
-  containers=$(docker compose ps --all --format "{{.Status}}" 2>/dev/null \
-    | grep -c "(healthy)" || true)
-  total=$(docker compose ps --all --format "{{.Status}}" 2>/dev/null | wc -l)
-  if [ "$health_ok" = "200" ] && [ "$containers" -eq "$total" ] && [ "$total" -ge 6 ]; then
+  health_ok=$(curl -kfsL -o /dev/null -w "%{http_code}" "$BASE_URL/health" || true)
+  if [ "$health_ok" = "200" ]; then
     ready=1
-    echo "   listo tras ${i}s extra: $containers/$total healthy, proxy 200"
+    echo "   listo tras ${i}s extra: proxy respondeu 200 en /health"
     break
   fi
   sleep 1
@@ -53,7 +50,7 @@ if [ "$ready" -ne 1 ]; then
 fi
 
 # --- 3) Snapshot de metricas (before) ----------------------------------------
-if curl -fs -o "$RESULTS_DIR/metrics_before.txt" "$BASE_URL/metrics"; then
+if curl -kfsL -o "$RESULTS_DIR/metrics_before.txt" "$BASE_URL/metrics"; then
   echo "== /metrics guardado en $RESULTS_DIR/metrics_before.txt =="
 else
   echo "WARN: /metrics no expuesto; se omite el snapshot before" >&2
@@ -72,7 +69,7 @@ echo "== Vegeta: carga fija 50 req/s =="
 bash tests/stress/vegeta_load.sh
 
 # --- 6) Snapshot de metricas (after) -----------------------------------------
-if curl -fs -o "$RESULTS_DIR/metrics_after.txt" "$BASE_URL/metrics"; then
+if curl -kfsL -o "$RESULTS_DIR/metrics_after.txt" "$BASE_URL/metrics"; then
   echo "== /metrics guardado en $RESULTS_DIR/metrics_after.txt =="
 else
   echo "WARN: /metrics no expuesto; se omite el snapshot after" >&2

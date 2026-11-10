@@ -1,9 +1,9 @@
-"""Matriz del endpoint canónico ``POST /extract`` (ISSUE-012).
+"""Matriz del endpoint canónico ``POST /api/v1/extract`` (ISSUE-012).
 
 Cubre los dos modos de entrada (R2: multipart/form-data y binario
 crudo), la equivalencia entre ambos, la frontera (400/413/415/422),
-las probes de vida y el alias de compatibilidad. Usa el wiring de
-producción (``main.app``): extremo a extremo real con pypdfium2.
+y las probes de vida. Usa el wiring de producción (``main.app``):
+extremo a extremo real con pypdfium2.
 """
 
 import pytest
@@ -13,7 +13,7 @@ import main
 from tests.fixtures.pdf_factory import blank_pdf, pdf_with_text
 from tests.integration.multipart import multipart_without_file_kwargs
 
-API_URL = "/extract"
+API_URL = "/api/v1/extract"
 PDF_CONTENT_TYPE = "application/pdf"
 EXPECTED_TEXT = "contenido esperado del documento"
 
@@ -183,30 +183,6 @@ class TestProbes:
 
         assert response.status_code == 200
         assert response.json()["ready"] is True
-
-
-class TestDeprecatedAlias:
-    def test_alias_posts_extract_identically_to_the_canonical_endpoint(self, client):
-        pdf = pdf_with_text(EXPECTED_TEXT)
-
-        canonical = client.post(
-            API_URL, content=pdf, headers={"content-type": PDF_CONTENT_TYPE}
-        )
-        alias = client.post(
-            "/api/v1/extract", content=pdf, headers={"content-type": PDF_CONTENT_TYPE}
-        )
-
-        assert canonical.status_code == alias.status_code == 200
-        assert canonical.json() == alias.json()
-
-    def test_nested_v1_v1_extract_returns_404(self, client):
-        response = client.post(
-            "/api/v1/v1/extract",
-            content=b"%PDF-1.4 x",
-            headers={"content-type": PDF_CONTENT_TYPE},
-        )
-
-        assert response.status_code == 404
 
 
 class TestNoLogicInTheHandler:

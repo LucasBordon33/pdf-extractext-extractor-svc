@@ -33,7 +33,7 @@ def test_nine_mb_pdf_is_processed_without_disk_writes(tmp_path, monkeypatch):
 
     with TestClient(main.app) as client:
         response = client.post(
-            "/extract", content=pdf, headers={"content-type": PDF_CONTENT_TYPE}
+            "/api/v1/extract", content=pdf, headers={"content-type": PDF_CONTENT_TYPE}
         )
 
     assert response.status_code == 200

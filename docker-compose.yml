@@ -8,7 +8,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: pdf-extractor:latest
+    image: pdf-extractor:1.0.0
     env_file:
       - path: .env
         required: false

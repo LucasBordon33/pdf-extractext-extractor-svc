@@ -33,9 +33,10 @@ class TestDefaults:
         assert settings.queue_max_size == 64
         assert settings.admission_timeout_seconds == 10.0
 
-    def test_http_limits_are_off_by_default(self):
+    def test_http_limits_are_off_by_default(self, monkeypatch):
         """Sin tope de concurrencia ni timeout de keep-alive impuestos:
         el servicio arranca sin limitar el runtime en desarrollo."""
+        monkeypatch.setenv("HTTP_LIMIT_CONCURRENCY", "")
         settings = Settings()
         assert settings.http_limit_concurrency is None
         assert settings.http_timeout_keep_alive == 5.0

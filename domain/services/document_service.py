@@ -22,8 +22,10 @@ import time
 from collections.abc import Callable
 from concurrent.futures import Future
 from concurrent.futures import TimeoutError as FutureTimeoutError
+from dataclasses import dataclass
 from math import ceil
 
+from core.constants import BYTES_PER_MB, size_limit_message
 from core.exceptions import (
     ExtractionTimeoutError,
     FileTooLargeError,
@@ -33,8 +35,17 @@ from domain.models.extraction_result import ExtractionResult
 from domain.ports.extraction_pool import ExtractionPool
 from domain.ports.text_extractor import PdfToMarkdown
 
-_BYTES_PER_MB = 1024 * 1024
 _RETRY_AFTER_OVERLOADED = 1
+
+
+@dataclass(frozen=True)
+class DocumentServiceConfig:
+
+    max_upload_size_mb: int
+    extract_timeout_seconds: float
+    max_concurrent_extractions: int
+    admission_timeout_seconds: float
+    admission_observer: Callable[[float], None] | None = None
 
 
 class DocumentService:
@@ -43,20 +54,15 @@ class DocumentService:
         self,
         extractor: PdfToMarkdown,
         pool: ExtractionPool,
-        *,
-        max_upload_size_mb: int,
-        extract_timeout_seconds: float,
-        max_concurrent_extractions: int,
-        admission_timeout_seconds: float,
-        admission_observer: Callable[[float], None] | None = None,
+        config: DocumentServiceConfig,
     ) -> None:
         self._extractor = extractor
         self._pool = pool
-        self._max_upload_bytes = max_upload_size_mb * _BYTES_PER_MB
-        self._timeout_seconds = extract_timeout_seconds
-        self._admission_timeout_seconds = admission_timeout_seconds
-        self._admission = threading.Semaphore(max_concurrent_extractions)
-        self._admission_observer = admission_observer
+        self._max_upload_bytes = config.max_upload_size_mb * BYTES_PER_MB
+        self._timeout_seconds = config.extract_timeout_seconds
+        self._admission_timeout_seconds = config.admission_timeout_seconds
+        self._admission = threading.Semaphore(config.max_concurrent_extractions)
+        self._admission_observer = config.admission_observer
 
     def extract(self, content: bytes, filename: str) -> ExtractionResult:
         self._ensure_size(content, filename)
@@ -91,8 +97,9 @@ class DocumentService:
     def _ensure_size(self, content: bytes, filename: str) -> None:
         if len(content) > self._max_upload_bytes:
             raise FileTooLargeError(
-                f"el archivo '{filename}' supera el maximo de"
-                f" {self._max_upload_bytes // _BYTES_PER_MB} MB"
+                size_limit_message(
+                    self._max_upload_bytes // BYTES_PER_MB, filename=filename
+                )
             )
 
     def _await_result(

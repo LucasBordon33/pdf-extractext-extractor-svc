@@ -42,7 +42,6 @@ class ExtractResponse(BaseModel):
 
 
 class ErrorResponse(BaseModel):
-    
 
     error_code: str = Field(description="Código interno del error de dominio.")
     message: str = Field(description="Descripción legible del fallo.")

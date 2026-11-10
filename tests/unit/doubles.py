@@ -29,15 +29,21 @@ def make_document_service(
     extract_timeout_seconds: float = 25.0,
     max_concurrent_extractions: int = 4,
     admission_timeout_seconds: float = 10.0,
+    admission_observer: Callable[[float], None] | None = None,
 ):
     """Construye un DocumentService con defaults de prueba."""
-    from domain.services.document_service import DocumentService
+    from domain.services.document_service import DocumentService, DocumentServiceConfig
 
-    return DocumentService(
-        extractor,
-        pool if pool is not None else ImmediateExtractionPool(),
+    config = DocumentServiceConfig(
         max_upload_size_mb=max_upload_size_mb,
         extract_timeout_seconds=extract_timeout_seconds,
         max_concurrent_extractions=max_concurrent_extractions,
         admission_timeout_seconds=admission_timeout_seconds,
+        admission_observer=admission_observer,
+    )
+
+    return DocumentService(
+        extractor,
+        pool if pool is not None else ImmediateExtractionPool(),
+        config=config,
     )

@@ -12,7 +12,7 @@ from domain.ports.text_extractor import PdfToMarkdown
 from domain.services.document_service import DocumentService
 from tests.unit.doubles import make_document_service
 
-API_URL = "/extract"
+API_URL = "/api/v1/extract"
 
 
 class ExplodingExtractor(PdfToMarkdown):
@@ -79,18 +79,13 @@ class TestManualDIWiring:
 
 
 class TestRouterRegistration:
-    def test_extract_route_is_mounted_at_the_root(self, client):
+    def test_extract_route_is_mounted(self, client):
         paths = client.get("/openapi.json").json()["paths"]
-        assert "/extract" in paths
         assert "/api/v1/extract" in paths
 
-    def test_canonical_extract_route_is_not_deprecated(self, client):
-        operation = client.get("/openapi.json").json()["paths"]["/extract"]["post"]
-        assert "deprecated" not in operation
-
-    def test_legacy_alias_extract_route_is_deprecated(self, client):
+    def test_extract_route_is_not_deprecated(self, client):
         operation = client.get("/openapi.json").json()["paths"]["/api/v1/extract"]["post"]
-        assert operation["deprecated"] is True
+        assert "deprecated" not in operation
 
 
 class TestUvicornRuntimeLimits:
@@ -138,8 +133,10 @@ class TestUvicornRuntimeLimits:
 
         assert run_kwargs["workers"] == main.get_settings().uvicorn_workers
 
-    def test_no_limit_concurrency_is_passed_as_none(self, run_kwargs):
+    def test_no_limit_concurrency_is_passed_as_none(self, run_kwargs, monkeypatch):
         """Sin tope, Uvicorn no debe recibir un numero inventado."""
+        monkeypatch.setenv("HTTP_LIMIT_CONCURRENCY", "")
+        main.get_settings.cache_clear()
         main.run()
 
         assert run_kwargs["limit_concurrency"] is None

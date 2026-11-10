@@ -1,9 +1,9 @@
-﻿"""Tests del endpoint POST /extract y de su alias deprecado /api/v1/extract.
+﻿"""Tests del endpoint POST /api/v1/extract.
 
 El servicio de dominio se dobla con un stub via dependency override:
 el router se prueba sin PyPDF2 ni I/O. La matriz completa (ambos modos
 de entrada, frontera, probes) vive en tests/integration/test_extract_endpoint.py;
-acá se verifica el alias y el mapeo de errores de dominio.
+acá se verifica el mapeo de errores de dominio.
 """
 
 import pytest
@@ -50,17 +50,20 @@ def make_client(extractor: PdfToMarkdown) -> TestClient:
     return TestClient(app, raise_server_exceptions=False)
 
 
-def post_raw(client: TestClient, url: str = "/extract", content: bytes = PDF_BYTES):
+API_URL = "/api/v1/extract"
+
+
+def post_raw(client: TestClient, url: str = API_URL, content: bytes = PDF_BYTES):
     return client.post(url, content=content, headers={"content-type": "application/pdf"})
 
 
-def post_multipart(client: TestClient, url: str = "/extract"):
+def post_multipart(client: TestClient, url: str = API_URL):
     return client.post(
         url, files={"file": ("reporte.pdf", PDF_BYTES, "application/pdf")}
     )
 
 
-class TestCanonicalEndpoint:
+class TestExtractEndpoint:
     def test_raw_binary_returns_extract_response(self):
         client = make_client(StubExtractor(result="hola mundo"))
         response = post_raw(client)
@@ -82,41 +85,6 @@ class TestCanonicalEndpoint:
 
         assert response.headers["X-Filename"] == "documento.pdf"
         assert response.headers["X-Replica"]
-
-
-class TestDeprecatedAlias:
-    API_URL = "/api/v1/extract"
-
-    def test_alias_delegates_to_the_same_handler(self):
-        client = make_client(StubExtractor(result="texto del pdf"))
-
-        canonical = post_raw(client)
-        alias = post_raw(client, self.API_URL)
-
-        assert canonical.status_code == alias.status_code == 200
-        assert canonical.json() == alias.json()
-
-    def test_alias_multipart_works(self):
-        client = make_client(StubExtractor())
-        assert post_multipart(client, self.API_URL).status_code == 200
-
-    def test_alias_is_marked_deprecated_in_openapi(self):
-        client = make_client(StubExtractor())
-        schema = client.get("/openapi.json").json()
-
-        canonical = schema["paths"]["/extract"]["post"]
-        alias = schema["paths"][self.API_URL]["post"]
-        assert alias["deprecated"] is True
-        assert "deprecated" not in canonical
-
-    def test_v1_v1_extract_returns_404(self):
-        client = make_client(StubExtractor())
-        response = client.post("/api/v1/v1/extract", content=PDF_BYTES)
-        assert response.status_code == 404
-
-    def test_alias_health_returns_200(self):
-        client = make_client(StubExtractor())
-        assert client.get("/api/v1/health").json() == {"status": "ok"}
 
 
 class TestBoundaryErrors:
@@ -151,7 +119,7 @@ class TestBoundaryErrors:
         self, request_args, expected_status, expected_code
     ):
         client = make_client(StubExtractor())
-        response = client.post("/extract", **request_args)
+        response = client.post(API_URL, **request_args)
 
         assert response.status_code == expected_status
         body = response.json()
@@ -199,7 +167,7 @@ class TestOpenApi:
     def test_endpoint_documents_response_model(self):
         client = make_client(StubExtractor())
         schema = client.get("/openapi.json").json()
-        operation = schema["paths"]["/extract"]["post"]
+        operation = schema["paths"][API_URL]["post"]
         ref = operation["responses"]["200"]["content"]["application/json"]["schema"]
         assert ref["$ref"] == "#/components/schemas/ExtractResponse"
         for status_code in ("400", "413", "415", "422", "500"):

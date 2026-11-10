@@ -11,7 +11,7 @@ from adapters.concurrency.thread_pool import ThreadPoolExtractionPool
 from adapters.extractors.pdf_extractor import PdfTextExtractor
 from api.metrics import METRICS
 from core.config import get_settings
-from domain.services.document_service import DocumentService
+from domain.services.document_service import DocumentService, DocumentServiceConfig
 
 _registry: dict[type, object] = {}
 
@@ -27,15 +27,14 @@ def build_document_service() -> DocumentService:
         max_concurrent=settings.max_concurrent_extractions,
         max_queue_depth=settings.queue_max_size,
     )
-    return DocumentService(
-        PdfTextExtractor(),
-        pool,
+    config = DocumentServiceConfig(
         max_upload_size_mb=settings.max_upload_size_mb,
         extract_timeout_seconds=settings.extract_timeout_seconds,
         max_concurrent_extractions=settings.max_concurrent_extractions,
         admission_timeout_seconds=settings.admission_timeout_seconds,
         admission_observer=METRICS.record_admission_wait,
     )
+    return DocumentService(PdfTextExtractor(), pool, config=config)
 
 
 @lru_cache

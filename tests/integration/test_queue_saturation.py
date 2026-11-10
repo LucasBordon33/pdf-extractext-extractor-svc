@@ -31,10 +31,10 @@ from api.app import create_app
 from api.dependencies import register
 from domain.models.extraction_result import ExtractionResult
 from domain.ports.text_extractor import PdfToMarkdown
-from domain.services.document_service import DocumentService
+from domain.services.document_service import DocumentService, DocumentServiceConfig
 from tests.fixtures.pdf_factory import pdf_with_text
 
-API_URL = "/extract"
+API_URL = "/api/v1/extract"
 PDF_CONTENT_TYPE = "application/pdf"
 SATURATED_STATUS = 503
 SATURATED_CODE = "QUEUE_SATURATED"
@@ -83,10 +83,12 @@ def build_app(
         DocumentService(
             SlowExtractor(extraction_seconds),
             pool,
-            max_upload_size_mb=12,
-            extract_timeout_seconds=25.0,
-            max_concurrent_extractions=max_concurrent,
-            admission_timeout_seconds=admission_timeout,
+            config=DocumentServiceConfig(
+                max_upload_size_mb=12,
+                extract_timeout_seconds=25.0,
+                max_concurrent_extractions=max_concurrent,
+                admission_timeout_seconds=admission_timeout,
+            ),
         ),
     )
     return create_app()

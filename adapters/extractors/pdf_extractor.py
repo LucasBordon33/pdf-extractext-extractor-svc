@@ -18,7 +18,6 @@ Gestión de memoria bajo carga:
 import threading
 import time
 from io import BytesIO
-from math import inf
 
 import pypdfium2 as pdfium
 
@@ -28,9 +27,6 @@ from adapters.markdown.page_segmenter import segment_page
 from core.exceptions import CorruptFileError, EmptyExtractionError
 from domain.models.extraction_result import ExtractionResult
 from domain.ports.text_extractor import PdfToMarkdown
-
-_UNBOUNDED_LEFT = -inf
-_UNBOUNDED = inf
 
 # PDFium (la libreria nativa) NO es thread-safe: dos extracciones
 # concurrentes en el mismo proceso producen `PdfiumError: Data format
